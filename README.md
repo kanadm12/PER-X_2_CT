@@ -1,7 +1,7 @@
 # Perspective Projection-Based 3D CT Reconstruction from Biplanar X-rays
 <b> <a href="https://arxiv.org/abs/2303.05297"> Perspective Projection-Based 3D CT Reconstruction from Biplanar X-rays </a> </b> 
 <br>
-<a href="https://sites.google.com/view/daeunkyung/"> Daeun Kyung*</a>,
+<a href="https://dek924.github.io/"> Daeun Kyung*</a>,
 <a href="https://www.linkedin.com/in/kyungmin-jo-931264181/?originalSubdomain=kr/"> Kyungmin Jo*</a>,
 <a href="https://sites.google.com/site/jaegulchoo/"> Jaegul Choo</a>,
 <a href="http://www.joonseok.net/home.html"> Joonseok Lee</a>,
