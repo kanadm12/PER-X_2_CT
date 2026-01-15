@@ -150,13 +150,20 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', comp
             print(f"  Reconstructing {num_slices} CT slices...")
             reconstructed_volume = []
             
+            # Determine valid slice range from config (typically 0 to ct_size-1)
+            # The model expects slice indices within the training CT volume size
+            max_slice_idx = 319  # ct_size is 320, so valid indices are 0-319
+            
             # Iterate through slice positions
             for slice_idx in range(num_slices):
+                # Wrap slice index to valid range to avoid out-of-bounds errors
+                actual_slice_idx = slice_idx % (max_slice_idx + 1)
+                
                 # Create batch for this slice
                 dummy_ct = torch.zeros_like(pa_tensor)  # Placeholder CT slice
                 
                 # File path with slice number (format: axis_slicenum.h5)
-                slice_filepath = f"dummy_path/coronal_{slice_idx:03d}.h5"
+                slice_filepath = f"dummy_path/coronal_{actual_slice_idx:03d}.h5"
                 
                 batch = {
                     'image_key': 'ctslice',
