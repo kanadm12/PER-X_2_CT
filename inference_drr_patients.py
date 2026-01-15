@@ -184,7 +184,7 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', comp
                         print(f"    {k}: shape={v.shape}, dtype={v.dtype}")
             
             # Save output
-            # Note: This is a placeholder - actual output format depends on model implementation
+            # The model outputs a single 2D CT slice reconstruction
             if isinstance(output, dict):
                 if 'reconstructions' in output:
                     recon = output['reconstructions']
@@ -195,8 +195,15 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', comp
             else:
                 recon = output
             
-            # Convert to numpy and save
+            # Convert to numpy: (1, 3, 128, 128) -> (128, 128)
             recon_np = recon.cpu().numpy()
+            # Take first channel and remove batch dimension
+            if len(recon_np.shape) == 4:  # (B, C, H, W)
+                recon_np = recon_np[0, 0, :, :]  # Take first batch and first channel
+            elif len(recon_np.shape) == 3:  # (C, H, W)
+                recon_np = recon_np[0, :, :]  # Take first channel
+            
+            print(f"  ✓ Reconstructed CT slice shape: {recon_np.shape}")
             
             # Save reconstructed CT as NIfTI
             output_path = output_dir / f"{patient_id}_reconstructed_ct.nii.gz"
@@ -204,44 +211,33 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', comp
             nib.save(nii_img, str(output_path))
             
             print(f"  ✓ Saved reconstruction to: {output_path.name}")
-            print(f"    Reconstructed CT shape: {recon_np.shape}")
             
             # Save comparison slices if GT is available
-            if gt_ct is not None:
-                # Save middle slice comparison
-                mid_slice = recon_np.shape[0] // 2 if len(recon_np.shape) > 2 else 0
-                
-                if len(recon_np.shape) >= 3:
-                    recon_slice = recon_np[mid_slice, :, :]
-                else:
-                    recon_slice = recon_np[0, :, :] if len(recon_np.shape) == 3 else recon_np
-                
-                # Get corresponding GT slice
-                if len(gt_ct.shape) >= 3:
-                    gt_mid = gt_ct.shape[0] // 2
-                    gt_slice = gt_ct[gt_mid, :, :]
-                else:
-                    gt_slice = gt_ct
+            if gt_ct is not None and compare_gt:
+                # Get middle slice from GT
+                gt_mid = gt_ct.shape[2] // 2  # GT is (H, W, D)
+                gt_slice = gt_ct[:, :, gt_mid]
                 
                 # Normalize for visualization
-                recon_vis = ((recon_slice - recon_slice.min()) / (recon_slice.max() - recon_slice.min() + 1e-8) * 255).astype(np.uint8)
+                recon_vis = ((recon_np - recon_np.min()) / (recon_np.max() - recon_np.min() + 1e-8) * 255).astype(np.uint8)
                 gt_vis = ((gt_slice - gt_slice.min()) / (gt_slice.max() - gt_slice.min() + 1e-8) * 255).astype(np.uint8)
                 
-                # Resize if needed
+                # Resize GT to match reconstruction size if needed
                 if gt_vis.shape != recon_vis.shape:
                     from skimage.transform import resize
-                    gt_vis = resize(gt_vis, recon_vis.shape, preserve_range=True).astype(np.uint8)
+                    gt_vis = resize(gt_vis, recon_vis.shape, preserve_range=True, anti_aliasing=True).astype(np.uint8)
                 
                 # Concatenate side by side
                 comparison = np.concatenate([recon_vis, gt_vis], axis=1)
                 
-                comparison_path = output_dir / f"{patient_id}_comparison_slice_{mid_slice}.png"
+                comparison_path = output_dir / f"{patient_id}_comparison.png"
                 imageio.imwrite(str(comparison_path), comparison)
                 print(f"  ✓ Saved comparison to: {comparison_path.name}")
             
             # Save input DRR visualizations
-            drr_vis_pa = (pa_img * 255).astype(np.uint8)
-            drr_vis_lat = (lat_img * 255).astype(np.uint8)
+            # pa_img and lat_img are (H, W, 3) numpy arrays in [0, 1] range
+            drr_vis_pa = (pa_img[:, :, 0] * 255).astype(np.uint8)  # Take first channel
+            drr_vis_lat = (lat_img[:, :, 0] * 255).astype(np.uint8)
             drr_combined = np.concatenate([drr_vis_pa, drr_vis_lat], axis=1)
             drr_path = output_dir / f"{patient_id}_input_drrs.png"
             imageio.imwrite(str(drr_path), drr_combined)
