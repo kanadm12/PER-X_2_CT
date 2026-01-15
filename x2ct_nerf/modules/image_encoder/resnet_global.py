@@ -84,20 +84,15 @@ class ResNetGLEncoder(nn.Module):
         if self.in_channels == 3 and x.shape[1] == 1:
             x = torch.cat([x] * 3, dim=1)
         
-        # Debug: print shapes and sizes
-        print(f"[ResNetGLEncoder] Input shape: {x.shape}, input_img_size: {self.input_img_size}, condition check: {x.shape[-2:] == (self.input_img_size, self.input_img_size)}")
-        
         # Apply transform: if input is already correct size, skip Resize and apply only Normalize
         # This avoids issues with Resize corrupting tensor dimensions
         if x.shape[-2:] == (self.input_img_size, self.input_img_size):
             # Manually apply ImageNet normalization
-            print(f"[ResNetGLEncoder] Using manual normalization")
             mean = torch.tensor([0.485, 0.456, 0.406], device=x.device).view(1, 3, 1, 1)
             std = torch.tensor([0.229, 0.224, 0.225], device=x.device).view(1, 3, 1, 1)
             x = (x - mean) / std
         else:
             # Use the full transform (Resize + Normalize)
-            print(f"[ResNetGLEncoder] Using full transform")
             x = self.transform(x)
         
         x = self.model.conv1(x)

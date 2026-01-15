@@ -175,6 +175,14 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', comp
             # Use log_images method for inference (this is what the test script uses)
             output = model.log_images(batch, split='val', p0=None, zoom_size=None)
             
+            # Debug: print output structure
+            print(f"  Output type: {type(output)}")
+            if isinstance(output, dict):
+                print(f"  Output keys: {output.keys()}")
+                for k, v in output.items():
+                    if torch.is_tensor(v):
+                        print(f"    {k}: shape={v.shape}, dtype={v.dtype}")
+            
             # Save output
             # Note: This is a placeholder - actual output format depends on model implementation
             if isinstance(output, dict):
