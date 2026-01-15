@@ -71,7 +71,7 @@ def preprocess_drr(drr_path, target_size=128):
     return img_array
 
 
-def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', compare_gt=False):
+def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', compare_gt=False, num_slices=128):
     """
     Run inference on a single patient's DRR data
     
@@ -81,6 +81,7 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', comp
         output_dir: Directory to save output
         device: Device to run inference on
         compare_gt: If True, load ground truth CT and save comparison images
+        num_slices: Number of CT slices to reconstruct (default: 128 for full volume)
     """
     patient_dir = Path(patient_dir)
     output_dir = Path(output_dir)
@@ -142,84 +143,82 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', comp
     # Run inference
     with torch.no_grad():
         try:
-            # Prepare batch in the format expected by the model
-            # The model expects 'image_key' to specify which key contains the CT data
-            # Since we don't have GT CT (we're reconstructing it), we'll use a dummy placeholder
-            dummy_ct = torch.zeros_like(pa_tensor)  # Placeholder CT slice
-            
-            # The model expects file_path_ to be in format: .../axis_slicenum.h5
-            # e.g., "coronal_064.h5" where axis is the reconstruction axis and 064 is slice number
-            dummy_filepath = f"dummy_path/coronal_064.h5"
-            
-            # Camera poses for PA and Lateral views (from x2ct_nerf/data/base.py)
-            # PA: pitch=0, yaw=0 (frontal view)
-            # Lateral: pitch=90°, yaw=90° (side view)
+            # Prepare camera poses (same for all slices)
             pa_cam = torch.tensor([[0.0, 0.0]], device=device)  # [batch_size, 2]
             lateral_cam = torch.tensor([[math.pi / 2, math.pi / 2]], device=device)  # [batch_size, 2]
             
-            batch = {
-                'image_key': 'ctslice',  # Key name for CT data
-                'ctslice': dummy_ct,     # Dummy CT (not used during inference)
-                'PA': pa_tensor,         # PA view X-ray
-                'Lateral': lat_tensor,   # Lateral view X-ray
-                'PA_cam': pa_cam,        # PA camera pose (pitch, yaw)
-                'Lateral_cam': lateral_cam,  # Lateral camera pose (pitch, yaw)
-                'file_path_': [dummy_filepath],  # Dummy file path in expected format
-            }
+            print(f"  Reconstructing {num_slices} CT slices...")
+            reconstructed_volume = []
             
-            print(f"  Batch PA shape: {batch['PA'].shape}, Lateral shape: {batch['Lateral'].shape}")
-            print(f"  Batch PA_cam shape: {batch['PA_cam'].shape}, Lateral_cam shape: {batch['Lateral_cam'].shape}")
-            print(f"  PA tensor min/max: {batch['PA'].min():.4f}/{batch['PA'].max():.4f}")
-            print(f"  Lateral tensor min/max: {batch['Lateral'].min():.4f}/{batch['Lateral'].max():.4f}")
-            
-            # Use log_images method for inference (this is what the test script uses)
-            output = model.log_images(batch, split='val', p0=None, zoom_size=None)
-            
-            # Debug: print output structure
-            print(f"  Output type: {type(output)}")
-            if isinstance(output, dict):
-                print(f"  Output keys: {output.keys()}")
-                for k, v in output.items():
-                    if torch.is_tensor(v):
-                        print(f"    {k}: shape={v.shape}, dtype={v.dtype}")
-            
-            # Save output
-            # The model outputs a single 2D CT slice reconstruction
-            if isinstance(output, dict):
-                if 'reconstructions' in output:
+            # Iterate through slice positions
+            for slice_idx in range(num_slices):
+                # Create batch for this slice
+                dummy_ct = torch.zeros_like(pa_tensor)  # Placeholder CT slice
+                
+                # File path with slice number (format: axis_slicenum.h5)
+                slice_filepath = f"dummy_path/coronal_{slice_idx:03d}.h5"
+                
+                batch = {
+                    'image_key': 'ctslice',
+                    'ctslice': dummy_ct,
+                    'PA': pa_tensor,
+                    'Lateral': lat_tensor,
+                    'PA_cam': pa_cam,
+                    'Lateral_cam': lateral_cam,
+                    'file_path_': [slice_filepath],
+                }
+                
+                # Run inference for this slice
+                output = model.log_images(batch, split='val', p0=None, zoom_size=None)
+                
+                # Extract reconstruction
+                if isinstance(output, dict) and 'reconstructions' in output:
                     recon = output['reconstructions']
-                elif 'rec' in output:
-                    recon = output['rec']
-                else:
-                    recon = list(output.values())[0]
-            else:
-                recon = output
+                    recon_np = recon.cpu().numpy()
+                    
+                    # Extract 2D slice: (1, 3, H, W) -> (H, W)
+                    if len(recon_np.shape) == 4:
+                        recon_slice = recon_np[0, 0, :, :]
+                    elif len(recon_np.shape) == 3:
+                        recon_slice = recon_np[0, :, :]
+                    else:
+                        recon_slice = recon_np
+                    
+                    reconstructed_volume.append(recon_slice)
+                
+                # Progress indicator
+                if (slice_idx + 1) % 10 == 0 or slice_idx == 0:
+                    print(f"    Progress: {slice_idx + 1}/{num_slices} slices")
             
-            # Convert to numpy: (1, 3, 128, 128) -> (128, 128)
-            recon_np = recon.cpu().numpy()
-            # Take first channel and remove batch dimension
-            if len(recon_np.shape) == 4:  # (B, C, H, W)
-                recon_np = recon_np[0, 0, :, :]  # Take first batch and first channel
-            elif len(recon_np.shape) == 3:  # (C, H, W)
-                recon_np = recon_np[0, :, :]  # Take first channel
+            # Stack slices into 3D volume
+            volume_3d = np.stack(reconstructed_volume, axis=2)  # (H, W, D)
+            print(f"  ✓ Reconstructed 3D CT volume shape: {volume_3d.shape}")
             
-            print(f"  ✓ Reconstructed CT slice shape: {recon_np.shape}")
-            
-            # Save reconstructed CT as NIfTI
-            output_path = output_dir / f"{patient_id}_reconstructed_ct.nii.gz"
-            nii_img = nib.Nifti1Image(recon_np, np.eye(4))
+            # Save reconstructed volume as NIfTI
+            output_path = output_dir / f"{patient_id}_reconstructed_volume.nii.gz"
+            nii_img = nib.Nifti1Image(volume_3d, np.eye(4))
             nib.save(nii_img, str(output_path))
+            print(f"  ✓ Saved 3D volume to: {output_path.name}")
             
-            print(f"  ✓ Saved reconstruction to: {output_path.name}")
+            # Also save middle slice separately
+            mid_slice_idx = num_slices // 2
+            mid_slice = reconstructed_volume[mid_slice_idx]
+            mid_slice_path = output_dir / f"{patient_id}_middle_slice.nii.gz"
+            nii_mid = nib.Nifti1Image(mid_slice, np.eye(4))
+            nib.save(nii_mid, str(mid_slice_path))
+            print(f"  ✓ Saved middle slice to: {mid_slice_path.name}")
             
-            # Save comparison slices if GT is available
+            # Save comparison with GT if available
             if gt_ct is not None and compare_gt:
-                # Get middle slice from GT
-                gt_mid = gt_ct.shape[2] // 2  # GT is (H, W, D)
+                # Use middle slice for comparison
+                recon_slice = reconstructed_volume[mid_slice_idx]
+                
+                # Get corresponding GT slice (GT is typically H x W x D)
+                gt_mid = gt_ct.shape[2] // 2
                 gt_slice = gt_ct[:, :, gt_mid]
                 
                 # Normalize for visualization
-                recon_vis = ((recon_np - recon_np.min()) / (recon_np.max() - recon_np.min() + 1e-8) * 255).astype(np.uint8)
+                recon_vis = ((recon_slice - recon_slice.min()) / (recon_slice.max() - recon_slice.min() + 1e-8) * 255).astype(np.uint8)
                 gt_vis = ((gt_slice - gt_slice.min()) / (gt_slice.max() - gt_slice.min() + 1e-8) * 255).astype(np.uint8)
                 
                 # Resize GT to match reconstruction size if needed
@@ -227,10 +226,10 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', comp
                     from skimage.transform import resize
                     gt_vis = resize(gt_vis, recon_vis.shape, preserve_range=True, anti_aliasing=True).astype(np.uint8)
                 
-                # Concatenate side by side
+                # Concatenate side by side (reconstruction | ground truth)
                 comparison = np.concatenate([recon_vis, gt_vis], axis=1)
                 
-                comparison_path = output_dir / f"{patient_id}_comparison.png"
+                comparison_path = output_dir / f"{patient_id}_comparison_middle_slice.png"
                 imageio.imwrite(str(comparison_path), comparison)
                 print(f"  ✓ Saved comparison to: {comparison_path.name}")
             
@@ -266,6 +265,8 @@ def main():
                         help='Device to run inference on (cuda or cpu)')
     parser.add_argument('--compare_gt', action='store_true',
                         help='If set, compare with ground truth CT volumes')
+    parser.add_argument('--num_slices', type=int, default=128,
+                        help='Number of CT slices to reconstruct for 3D volume (default: 128)')
     
     args = parser.parse_args()
     
@@ -283,6 +284,7 @@ def main():
     
     print(f"\nFound {len(patient_dirs)} patient directories")
     print(f"Output directory: {args.output_dir}")
+    print(f"Reconstructing {args.num_slices} slices per volume")
     if args.compare_gt:
         print(f"Ground truth comparison: ENABLED")
     print()
@@ -291,7 +293,7 @@ def main():
     results = []
     for patient_dir in tqdm(patient_dirs, desc="Processing patients"):
         result = run_inference_on_patient(
-            model, patient_dir, args.output_dir, args.device, args.compare_gt
+            model, patient_dir, args.output_dir, args.device, args.compare_gt, args.num_slices
         )
         results.append((patient_dir.name, result is not None))
     
