@@ -106,15 +106,20 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda'):
     # Run inference
     with torch.no_grad():
         try:
-            # This is a simplified version - you may need to adjust based on actual model input format
-            # The model expects specific input format with PA and Lateral views
+            # Prepare batch in the format expected by the model
+            # The model expects 'image_key' to specify which key contains the CT data
+            # Since we don't have GT CT (we're reconstructing it), we'll use a dummy placeholder
+            dummy_ct = torch.zeros_like(pa_tensor)  # Placeholder CT slice
+            
             batch = {
-                'PA': pa_tensor,
-                'Lateral': lat_tensor,
+                'image_key': 'ctslice',  # Key name for CT data
+                'ctslice': dummy_ct,     # Dummy CT (not used during inference)
+                'PA': pa_tensor,         # PA view X-ray
+                'Lateral': lat_tensor,   # Lateral view X-ray
             }
             
-            # Generate CT reconstruction
-            output = model(batch)
+            # Use log_images method for inference (this is what the test script uses)
+            output = model.log_images(batch, split='val', p0=None, zoom_size=None)
             
             # Save output
             # Note: This is a placeholder - actual output format depends on model implementation
