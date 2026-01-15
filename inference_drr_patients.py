@@ -1,6 +1,12 @@
 """
 Simple inference script for DRR patient data
 This script loads a trained PerX2CT model and generates CT volumes from DRR images
+
+Data format expected:
+- Each patient folder contains:
+  - *_pa_drr.png: PA (posterior-anterior) view DRR
+  - *_lat_drr.png: Lateral view DRR  
+  - *.nii.gz: Ground truth CT volume (optional, for comparison)
 """
 
 import os
@@ -13,6 +19,7 @@ from omegaconf import OmegaConf
 from importlib import import_module
 import argparse
 from tqdm import tqdm
+import imageio
 
 
 def load_model(config_path, ckpt_path, device='cuda'):
@@ -58,15 +65,16 @@ def preprocess_drr(drr_path, target_size=128):
     return img_array
 
 
-def run_inference_on_patient(model, patient_dir, output_dir, device='cuda'):
+def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', compare_gt=False):
     """
     Run inference on a single patient's DRR data
     
     Args:
         model: Trained PerX2CT model
-        patient_dir: Directory containing patient DRR files (PA and Lateral)
+        patient_dir: Directory containing patient DRR files (PA and Lateral) and optional GT CT
         output_dir: Directory to save output
         device: Device to run inference on
+        compare_gt: If True, load ground truth CT and save comparison images
     """
     patient_dir = Path(patient_dir)
     output_dir = Path(output_dir)
@@ -74,15 +82,22 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda'):
     
     patient_id = patient_dir.name
     
-    # Find DRR files
+    # Find DRR files (these should be the vertically flipped versions)
     pa_drr = None
     lat_drr = None
+    gt_ct_path = None
     
     for file in patient_dir.glob("*.png"):
-        if "_pa_drr" in file.name or "_PA_drr" in file.name:
+        if "_pa_drr" in file.name.lower():
             pa_drr = file
-        elif "_lat_drr" in file.name or "_lateral_drr" in file.name or "_Lateral_drr" in file.name:
+        elif "_lat_drr" in file.name.lower() or "_lateral_drr" in file.name.lower():
             lat_drr = file
+    
+    # Find ground truth CT
+    for file in patient_dir.glob("*.nii.gz"):
+        if not ("_reconstructed" in file.name or "_flipped" in file.name):
+            gt_ct_path = file
+            break
     
     if pa_drr is None or lat_drr is None:
         print(f"Warning: Could not find both PA and Lateral DRRs for {patient_id}")
@@ -93,10 +108,22 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda'):
     print(f"\nProcessing patient: {patient_id}")
     print(f"  PA DRR: {pa_drr.name}")
     print(f"  Lateral DRR: {lat_drr.name}")
+    if gt_ct_path:
+        print(f"  Ground Truth CT: {gt_ct_path.name}")
     
-    # Load and preprocess DRRs
+    # Load and preprocess DRRs (already flipped by flip_drr_images.py script)
     pa_img = preprocess_drr(pa_drr)
     lat_img = preprocess_drr(lat_drr)
+    
+    # Load ground truth CT if available and requested
+    gt_ct = None
+    if compare_gt and gt_ct_path and gt_ct_path.exists():
+        try:
+            gt_nii = nib.load(gt_ct_path)
+            gt_ct = gt_nii.get_fdata()
+            print(f"  Loaded GT CT shape: {gt_ct.shape}")
+        except Exception as e:
+            print(f"  Warning: Could not load GT CT: {e}")
     
     # Prepare input
     # Stack to 3 channels (model expects 3-channel input)
@@ -141,12 +168,54 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda'):
             # Convert to numpy and save
             recon_np = recon.cpu().numpy()
             
-            # Save as NIfTI
+            # Save reconstructed CT as NIfTI
             output_path = output_dir / f"{patient_id}_reconstructed_ct.nii.gz"
             nii_img = nib.Nifti1Image(recon_np, np.eye(4))
             nib.save(nii_img, str(output_path))
             
-            print(f"  ✓ Saved reconstruction to: {output_path}")
+            print(f"  ✓ Saved reconstruction to: {output_path.name}")
+            print(f"    Reconstructed CT shape: {recon_np.shape}")
+            
+            # Save comparison slices if GT is available
+            if gt_ct is not None:
+                # Save middle slice comparison
+                mid_slice = recon_np.shape[0] // 2 if len(recon_np.shape) > 2 else 0
+                
+                if len(recon_np.shape) >= 3:
+                    recon_slice = recon_np[mid_slice, :, :]
+                else:
+                    recon_slice = recon_np[0, :, :] if len(recon_np.shape) == 3 else recon_np
+                
+                # Get corresponding GT slice
+                if len(gt_ct.shape) >= 3:
+                    gt_mid = gt_ct.shape[0] // 2
+                    gt_slice = gt_ct[gt_mid, :, :]
+                else:
+                    gt_slice = gt_ct
+                
+                # Normalize for visualization
+                recon_vis = ((recon_slice - recon_slice.min()) / (recon_slice.max() - recon_slice.min() + 1e-8) * 255).astype(np.uint8)
+                gt_vis = ((gt_slice - gt_slice.min()) / (gt_slice.max() - gt_slice.min() + 1e-8) * 255).astype(np.uint8)
+                
+                # Resize if needed
+                if gt_vis.shape != recon_vis.shape:
+                    from skimage.transform import resize
+                    gt_vis = resize(gt_vis, recon_vis.shape, preserve_range=True).astype(np.uint8)
+                
+                # Concatenate side by side
+                comparison = np.concatenate([recon_vis, gt_vis], axis=1)
+                
+                comparison_path = output_dir / f"{patient_id}_comparison_slice_{mid_slice}.png"
+                imageio.imwrite(str(comparison_path), comparison)
+                print(f"  ✓ Saved comparison to: {comparison_path.name}")
+            
+            # Save input DRR visualizations
+            drr_vis_pa = (pa_img * 255).astype(np.uint8)
+            drr_vis_lat = (lat_img * 255).astype(np.uint8)
+            drr_combined = np.concatenate([drr_vis_pa, drr_vis_lat], axis=1)
+            drr_path = output_dir / f"{patient_id}_input_drrs.png"
+            imageio.imwrite(str(drr_path), drr_combined)
+            print(f"  ✓ Saved input DRRs to: {drr_path.name}")
             
             return recon_np
             
@@ -169,12 +238,16 @@ def main():
                         help='Directory to save reconstructed CT volumes')
     parser.add_argument('--device', type=str, default='cuda',
                         help='Device to run inference on (cuda or cpu)')
+    parser.add_argument('--compare_gt', action='store_true',
+                        help='If set, compare with ground truth CT volumes')
     
     args = parser.parse_args()
     
     # Load model
     print("="*60)
-    print("PerX2CT DRR Inference")
+    print("PerX2CT DRR to CT Reconstruction")
+    print("="*60)
+    print(f"Note: Using vertically flipped DRRs from {args.data_dir}")
     print("="*60)
     model, config = load_model(args.config_path, args.ckpt_path, args.device)
     
@@ -183,13 +256,16 @@ def main():
     patient_dirs = [d for d in data_dir.iterdir() if d.is_dir()]
     
     print(f"\nFound {len(patient_dirs)} patient directories")
-    print(f"Output directory: {args.output_dir}\n")
+    print(f"Output directory: {args.output_dir}")
+    if args.compare_gt:
+        print(f"Ground truth comparison: ENABLED")
+    print()
     
     # Process each patient
     results = []
     for patient_dir in tqdm(patient_dirs, desc="Processing patients"):
         result = run_inference_on_patient(
-            model, patient_dir, args.output_dir, args.device
+            model, patient_dir, args.output_dir, args.device, args.compare_gt
         )
         results.append((patient_dir.name, result is not None))
     
