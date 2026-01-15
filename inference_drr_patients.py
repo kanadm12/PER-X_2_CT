@@ -214,16 +214,32 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', comp
                 reconstructed_volumes[axis] = volume_3d
                 print(f"  ✓ Reconstructed {axis} volume shape: {volume_3d.shape}")
                 print(f"    Intensity range: [{volume_3d.min():.2f}, {volume_3d.max():.2f}]")
-                
-                # Save this view as separate NIfTI with proper spacing
+            
+            # Combine all three views into a single 4D volume (H x W x D x 3)
+            # Where the 4th dimension contains: [0]=sagittal, [1]=axial, [2]=coronal
+            combined_volume = np.stack([
+                reconstructed_volumes['sagittal'],
+                reconstructed_volumes['axial'],
+                reconstructed_volumes['coronal']
+            ], axis=3)  # (H, W, D, 3)
+            
+            print(f"  ✓ Combined volume shape: {combined_volume.shape}")
+            
+            # Save combined 4D volume
+            output_path = output_dir / f"{patient_id}_reconstructed_all_views.nii.gz"
+            affine = np.eye(4)
+            affine[0, 0] = 1.0  # x spacing
+            affine[1, 1] = 1.0  # y spacing  
+            affine[2, 2] = 1.0  # z spacing
+            nii_img = nib.Nifti1Image(combined_volume.astype(np.float32), affine)
+            nib.save(nii_img, str(output_path))
+            print(f"  ✓ Saved combined 4D volume to: {output_path.name}")
+            print(f"    Use 4th dimension to switch between: sagittal (0), axial (1), coronal (2)")
+            
+            # Also save individual views for convenience
+            for axis in anatomical_axes:
                 output_path = output_dir / f"{patient_id}_reconstructed_{axis}.nii.gz"
-                # Create affine matrix with proper voxel spacing (in mm)
-                # Assuming isotropic 1mm spacing for 128x128x128 volume
-                affine = np.eye(4)
-                affine[0, 0] = 1.0  # x spacing
-                affine[1, 1] = 1.0  # y spacing  
-                affine[2, 2] = 1.0  # z spacing
-                nii_img = nib.Nifti1Image(volume_3d.astype(np.float32), affine)
+                nii_img = nib.Nifti1Image(reconstructed_volumes[axis].astype(np.float32), affine)
                 nib.save(nii_img, str(output_path))
                 print(f"  ✓ Saved {axis} volume to: {output_path.name}")
             
