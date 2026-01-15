@@ -111,12 +111,16 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda'):
             # Since we don't have GT CT (we're reconstructing it), we'll use a dummy placeholder
             dummy_ct = torch.zeros_like(pa_tensor)  # Placeholder CT slice
             
+            # The model expects file_path_ to be in format: .../axis_slicenum.h5
+            # e.g., "coronal_064.h5" where axis is the reconstruction axis and 064 is slice number
+            dummy_filepath = f"dummy_path/coronal_064.h5"
+            
             batch = {
                 'image_key': 'ctslice',  # Key name for CT data
                 'ctslice': dummy_ct,     # Dummy CT (not used during inference)
                 'PA': pa_tensor,         # PA view X-ray
                 'Lateral': lat_tensor,   # Lateral view X-ray
-                'file_path_': [str(patient_dir / f"{patient_id}.h5")],  # Dummy file path for logging
+                'file_path_': [dummy_filepath],  # Dummy file path in expected format
             }
             
             # Use log_images method for inference (this is what the test script uses)
