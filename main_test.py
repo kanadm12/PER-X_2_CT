@@ -51,7 +51,8 @@ def load_vqgan(config, model_module, ckpt_path=None):
     model = model_module(**config.model.params)
 
     if ckpt_path is not None:
-        sd = torch.load(ckpt_path, map_location="cpu")["state_dict"]
+        # PyTorch 2.6+ requires weights_only=False for loading PyTorch Lightning checkpoints
+        sd = torch.load(ckpt_path, map_location="cpu", weights_only=False)["state_dict"]
         missing, unexpected = model.load_state_dict(sd, strict=False)
     return model.eval()
 
