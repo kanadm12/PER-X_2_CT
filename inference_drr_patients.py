@@ -116,6 +116,7 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda'):
                 'ctslice': dummy_ct,     # Dummy CT (not used during inference)
                 'PA': pa_tensor,         # PA view X-ray
                 'Lateral': lat_tensor,   # Lateral view X-ray
+                'file_path_': [str(patient_dir / f"{patient_id}.h5")],  # Dummy file path for logging
             }
             
             # Use log_images method for inference (this is what the test script uses)
