@@ -126,10 +126,15 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', comp
         except Exception as e:
             print(f"  Warning: Could not load GT CT: {e}")
     
-    # Prepare input
-    # Stack to 3 channels (model expects 3-channel input)
-    pa_tensor = torch.from_numpy(pa_img).unsqueeze(0).unsqueeze(0).repeat(1, 3, 1, 1).to(device)
-    lat_tensor = torch.from_numpy(lat_img).unsqueeze(0).unsqueeze(0).repeat(1, 3, 1, 1).to(device)
+    # Prepare input - convert grayscale to 3-channel RGB format
+    # Images are (H, W) -> need to be (1, 3, H, W) [batch, channels, height, width]
+    pa_tensor = torch.from_numpy(pa_img).unsqueeze(0).unsqueeze(0).to(device)  # (1, 1, H, W)
+    pa_tensor = pa_tensor.repeat(1, 3, 1, 1)  # (1, 3, H, W) - repeat across channel dimension
+    
+    lat_tensor = torch.from_numpy(lat_img).unsqueeze(0).unsqueeze(0).to(device)  # (1, 1, H, W)
+    lat_tensor = lat_tensor.repeat(1, 3, 1, 1)  # (1, 3, H, W) - repeat across channel dimension
+    
+    print(f"  Input tensor shapes - PA: {pa_tensor.shape}, Lateral: {lat_tensor.shape}")
     
     # Run inference
     with torch.no_grad():
