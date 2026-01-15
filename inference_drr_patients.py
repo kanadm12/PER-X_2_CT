@@ -49,19 +49,24 @@ def load_model(config_path, ckpt_path, device='cuda'):
 
 
 def preprocess_drr(drr_path, target_size=128):
-    """Load and preprocess a DRR image"""
+    """Load and preprocess a DRR image to match training data format"""
     img = Image.open(drr_path).convert('L')  # Convert to grayscale
     
     # Resize if needed
     if img.size != (target_size, target_size):
         img = img.resize((target_size, target_size), Image.BILINEAR)
     
-    # Convert to numpy array and normalize
+    # Convert to numpy array (H, W)
     img_array = np.array(img, dtype=np.float32)
     
-    # Normalize to [0, 1]
+    # Normalize to [0, 1] (matches XRAY_MIN_MAX = [0, 255] with normalization)
     if img_array.max() > 0:
         img_array = img_array / 255.0
+    
+    # Convert to (H, W, 3) format like training data
+    # Training data does: np.concatenate((image, image, image), axis=-1)
+    img_array = np.expand_dims(img_array, -1)  # (H, W, 1)
+    img_array = np.concatenate((img_array, img_array, img_array), axis=-1)  # (H, W, 3)
     
     return img_array
 
@@ -113,8 +118,8 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', comp
         print(f"  Ground Truth CT: {gt_ct_path.name}")
     
     # Load and preprocess DRRs (already flipped by flip_drr_images.py script)
-    pa_img = preprocess_drr(pa_drr)
-    lat_img = preprocess_drr(lat_drr)
+    pa_img = preprocess_drr(pa_drr)  # Returns (H, W, 3) numpy array
+    lat_img = preprocess_drr(lat_drr)  # Returns (H, W, 3) numpy array
     
     # Load ground truth CT if available and requested
     gt_ct = None
@@ -126,13 +131,10 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', comp
         except Exception as e:
             print(f"  Warning: Could not load GT CT: {e}")
     
-    # Prepare input - convert grayscale to 3-channel RGB format
-    # Images are (H, W) -> need to be (1, 3, H, W) [batch, channels, height, width]
-    pa_tensor = torch.from_numpy(pa_img).unsqueeze(0).unsqueeze(0).to(device)  # (1, 1, H, W)
-    pa_tensor = pa_tensor.repeat(1, 3, 1, 1)  # (1, 3, H, W) - repeat across channel dimension
-    
-    lat_tensor = torch.from_numpy(lat_img).unsqueeze(0).unsqueeze(0).to(device)  # (1, 1, H, W)
-    lat_tensor = lat_tensor.repeat(1, 3, 1, 1)  # (1, 3, H, W) - repeat across channel dimension
+    # Convert to torch tensors (H, W, C) -> (C, H, W) and add batch dimension
+    # This matches the ToTensor() transform in training data preprocessing
+    pa_tensor = torch.from_numpy(pa_img).permute(2, 0, 1).unsqueeze(0).to(device).float()  # (1, 3, H, W)
+    lat_tensor = torch.from_numpy(lat_img).permute(2, 0, 1).unsqueeze(0).to(device).float()  # (1, 3, H, W)
     
     print(f"  Input tensor shapes - PA: {pa_tensor.shape}, Lateral: {lat_tensor.shape}")
     
