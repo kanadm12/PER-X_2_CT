@@ -2,7 +2,11 @@ import torch
 import torch.nn.functional as F
 import pytorch_lightning as pl
 from importlib import import_module
-from pytorch_lightning.utilities.distributed import rank_zero_only
+# Fix for PyTorch Lightning compatibility
+try:
+    from pytorch_lightning.utilities.distributed import rank_zero_only
+except ImportError:
+    from pytorch_lightning.utilities.rank_zero import rank_zero_only
 import torchvision.transforms as transforms
 import pdb
 
