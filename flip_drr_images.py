@@ -5,6 +5,7 @@ of the drr_patient_data folder.
 """
 
 import os
+import shutil
 from pathlib import Path
 from PIL import Image
 from tqdm import tqdm
@@ -38,14 +39,14 @@ def flip_drr_images(root_dir, backup=True, inplace=True):
     
     for png_file in tqdm(png_files, desc="Flipping DRR images"):
         try:
-            # Read the image
-            img = Image.open(png_file)
-            
             # Create backup if requested
             if backup and inplace:
                 backup_path = png_file.with_suffix('.png.backup')
                 if not backup_path.exists():
-                    img.save(backup_path)
+                    shutil.copy2(png_file, backup_path)
+            
+            # Read the image
+            img = Image.open(png_file)
             
             # Vertically flip the image (flip top-to-bottom)
             flipped_img = img.transpose(Image.FLIP_TOP_BOTTOM)
