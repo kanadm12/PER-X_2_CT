@@ -20,6 +20,7 @@ from importlib import import_module
 import argparse
 from tqdm import tqdm
 import imageio
+import math
 
 
 def load_model(config_path, ckpt_path, device='cuda'):
@@ -142,11 +143,19 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', comp
             # e.g., "coronal_064.h5" where axis is the reconstruction axis and 064 is slice number
             dummy_filepath = f"dummy_path/coronal_064.h5"
             
+            # Camera poses for PA and Lateral views (from x2ct_nerf/data/base.py)
+            # PA: pitch=0, yaw=0 (frontal view)
+            # Lateral: pitch=90°, yaw=90° (side view)
+            pa_cam = torch.tensor([[0.0, 0.0]], device=device)  # [batch_size, 2]
+            lateral_cam = torch.tensor([[math.pi / 2, math.pi / 2]], device=device)  # [batch_size, 2]
+            
             batch = {
                 'image_key': 'ctslice',  # Key name for CT data
                 'ctslice': dummy_ct,     # Dummy CT (not used during inference)
                 'PA': pa_tensor,         # PA view X-ray
                 'Lateral': lat_tensor,   # Lateral view X-ray
+                'PA_cam': pa_cam,        # PA camera pose (pitch, yaw)
+                'Lateral_cam': lateral_cam,  # Lateral camera pose (pitch, yaw)
                 'file_path_': [dummy_filepath],  # Dummy file path in expected format
             }
             
