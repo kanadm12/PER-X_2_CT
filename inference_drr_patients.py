@@ -149,108 +149,79 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', comp
             # Maximum number of slices per axis (based on 128x128 image resolution)
             max_slice_idx = 127  # 128 slices (0-127)
             
-            # Reconstruct from all three anatomical views
-            # The same PA/Lateral DRR pair is used to reconstruct slices from all three orientations
-            # The model uses implicit neural representation (NeRF) to query different spatial positions
-            anatomical_axes = ['sagittal', 'axial', 'coronal']
-            reconstructed_volumes = {}
+            # Reconstruct axial view only
+            print(f"  Reconstructing axial view ({max_slice_idx + 1} slices)...")
+            volume_slices = []
             
-            for axis in anatomical_axes:
-                print(f"  Reconstructing {axis} view ({max_slice_idx + 1} slices)...")
-                volume_slices = []
+            # Iterate through slice positions for axial axis
+            for slice_idx in range(max_slice_idx + 1):
+                # Create batch for this slice
+                dummy_ct = torch.zeros_like(pa_tensor)  # Placeholder CT slice
                 
-                # Iterate through slice positions for this axis
-                for slice_idx in range(max_slice_idx + 1):
-                    # Create batch for this slice
-                    dummy_ct = torch.zeros_like(pa_tensor)  # Placeholder CT slice
-                    
-                    # File path with axis and slice number (format: axis_slicenum.h5)
-                    slice_filepath = f"dummy_path/{axis}_{slice_idx:03d}.h5"
-                    
-                    batch = {
-                        'image_key': 'ctslice',
-                        'ctslice': dummy_ct,
-                        'PA': pa_tensor,
-                        'Lateral': lat_tensor,
-                        'PA_cam': pa_cam,
-                        'Lateral_cam': lateral_cam,
-                        'file_path_': [slice_filepath],
-                    }
-                    
-                    # Run inference for this slice
-                    output = model.log_images(batch, split='val', p0=None, zoom_size=None)
-                    
-                    # Extract reconstruction
-                    if isinstance(output, dict) and 'reconstructions' in output:
-                        recon = output['reconstructions']
-                        recon_np = recon.cpu().numpy()
-                        
-                        # Extract 2D slice: (1, 3, H, W) -> (H, W)
-                        if len(recon_np.shape) == 4:
-                            recon_slice = recon_np[0, 0, :, :]
-                        elif len(recon_np.shape) == 3:
-                            recon_slice = recon_np[0, :, :]
-                        else:
-                            recon_slice = recon_np
-                        
-                        volume_slices.append(recon_slice)
-                    
-                    # Progress indicator
-                    if (slice_idx + 1) % 20 == 0 or slice_idx == 0:
-                        print(f"    Progress: {slice_idx + 1}/{max_slice_idx + 1} slices")
+                # File path with axis and slice number (format: axis_slicenum.h5)
+                slice_filepath = f"dummy_path/axial_{slice_idx:03d}.h5"
                 
-                # Stack slices into 3D volume
-                volume_3d = np.stack(volume_slices, axis=2)  # (H, W, D)
+                batch = {
+                    'image_key': 'ctslice',
+                    'ctslice': dummy_ct,
+                    'PA': pa_tensor,
+                    'Lateral': lat_tensor,
+                    'PA_cam': pa_cam,
+                    'Lateral_cam': lateral_cam,
+                    'file_path_': [slice_filepath],
+                }
                 
-                # Normalize entire volume consistently (important for consistent viewing in 3D Slicer)
-                # This prevents apparent "zooming" when scrolling through slices
-                volume_min = volume_3d.min()
-                volume_max = volume_3d.max()
-                if volume_max > volume_min:
-                    volume_3d = (volume_3d - volume_min) / (volume_max - volume_min)
-                    # Scale to HU-like range for CT (typically -1024 to 3071)
-                    volume_3d = volume_3d * 4095 - 1024
+                # Run inference for this slice
+                output = model.log_images(batch, split='val', p0=None, zoom_size=None)
                 
-                reconstructed_volumes[axis] = volume_3d
-                print(f"  ✓ Reconstructed {axis} volume shape: {volume_3d.shape}")
-                print(f"    Intensity range: [{volume_3d.min():.2f}, {volume_3d.max():.2f}]")
+                # Extract reconstruction
+                if isinstance(output, dict) and 'reconstructions' in output:
+                    recon = output['reconstructions']
+                    recon_np = recon.cpu().numpy()
+                    
+                    # Extract 2D slice: (1, 3, H, W) -> (H, W)
+                    if len(recon_np.shape) == 4:
+                        recon_slice = recon_np[0, 0, :, :]
+                    elif len(recon_np.shape) == 3:
+                        recon_slice = recon_np[0, :, :]
+                    else:
+                        recon_slice = recon_np
+                    
+                    volume_slices.append(recon_slice)
+                
+                # Progress indicator
+                if (slice_idx + 1) % 20 == 0 or slice_idx == 0:
+                    print(f"    Progress: {slice_idx + 1}/{max_slice_idx + 1} slices")
             
-            # Combine all three views into a single 4D volume (H x W x D x 3)
-            # Where the 4th dimension contains: [0]=sagittal, [1]=axial, [2]=coronal
-            combined_volume = np.stack([
-                reconstructed_volumes['sagittal'],
-                reconstructed_volumes['axial'],
-                reconstructed_volumes['coronal']
-            ], axis=3)  # (H, W, D, 3)
+            # Stack slices into 3D volume
+            volume_3d = np.stack(volume_slices, axis=2)  # (H, W, D)
             
-            print(f"  ✓ Combined volume shape: {combined_volume.shape}")
+            # Normalize entire volume consistently (important for consistent viewing in 3D Slicer)
+            volume_min = volume_3d.min()
+            volume_max = volume_3d.max()
+            if volume_max > volume_min:
+                volume_3d = (volume_3d - volume_min) / (volume_max - volume_min)
+                # Scale to HU-like range for CT (typically -1024 to 3071)
+                volume_3d = volume_3d * 4095 - 1024
             
-            # Save combined 4D volume
-            output_path = output_dir / f"{patient_id}_reconstructed_all_views.nii.gz"
+            print(f"  ✓ Reconstructed axial volume shape: {volume_3d.shape}")
+            print(f"    Intensity range: [{volume_3d.min():.2f}, {volume_3d.max():.2f}]")
+            
+            # Save axial volume
+            output_path = output_dir / f"{patient_id}_reconstructed_axial.nii.gz"
             affine = np.eye(4)
-            affine[0, 0] = 1.0  # x spacing
-            affine[1, 1] = 1.0  # y spacing  
-            affine[2, 2] = 1.0  # z spacing
-            nii_img = nib.Nifti1Image(combined_volume.astype(np.float32), affine)
+            affine[0, 0] = 1.0  # x spacing (mm)
+            affine[1, 1] = 1.0  # y spacing (mm)
+            affine[2, 2] = 1.0  # z spacing (mm)
+            nii_img = nib.Nifti1Image(volume_3d.astype(np.float32), affine)
             nib.save(nii_img, str(output_path))
-            print(f"  ✓ Saved combined 4D volume to: {output_path.name}")
-            print(f"    Use 4th dimension to switch between: sagittal (0), axial (1), coronal (2)")
+            print(f"  ✓ Saved axial volume to: {output_path.name}")
             
-            # Also save individual views for convenience
-            for axis in anatomical_axes:
-                output_path = output_dir / f"{patient_id}_reconstructed_{axis}.nii.gz"
-                nii_img = nib.Nifti1Image(reconstructed_volumes[axis].astype(np.float32), affine)
-                nib.save(nii_img, str(output_path))
-                print(f"  ✓ Saved {axis} volume to: {output_path.name}")
-            
-            print(f"  ✓ Reconstructed all three anatomical views successfully!")
-            
-            # Save comparison with GT if available (use coronal middle slice)
+            # Save comparison with GT if available (use axial middle slice)
             if gt_ct is not None and compare_gt:
-                # Use middle slice from coronal view for comparison
-                coronal_volume = reconstructed_volumes['coronal']
-                mid_slice_idx = coronal_volume.shape[2] // 2
-                recon_slice = coronal_volume[:, :, mid_slice_idx]
+                # Use middle slice from axial view for comparison
+                mid_slice_idx = volume_3d.shape[2] // 2
+                recon_slice = volume_3d[:, :, mid_slice_idx]
                 
                 # Get corresponding GT slice (GT is typically H x W x D)
                 gt_mid = gt_ct.shape[2] // 2
@@ -268,7 +239,7 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', comp
                 # Concatenate side by side (reconstruction | ground truth)
                 comparison = np.concatenate([recon_vis, gt_vis], axis=1)
                 
-                comparison_path = output_dir / f"{patient_id}_comparison_coronal_middle.png"
+                comparison_path = output_dir / f"{patient_id}_comparison_axial_middle.png"
                 imageio.imwrite(str(comparison_path), comparison)
                 print(f"  ✓ Saved comparison to: {comparison_path.name}")
             
@@ -321,7 +292,7 @@ def main():
     
     print(f"\nFound {len(patient_dirs)} patient directories")
     print(f"Output directory: {args.output_dir}")
-    print(f"Reconstructing all three anatomical views (sagittal, axial, coronal)")
+    print(f"Reconstructing axial view (128 slices)")
     if args.compare_gt:
         print(f"Ground truth comparison: ENABLED")
     print()
