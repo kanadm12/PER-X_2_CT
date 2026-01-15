@@ -201,12 +201,29 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', comp
                 
                 # Stack slices into 3D volume
                 volume_3d = np.stack(volume_slices, axis=2)  # (H, W, D)
+                
+                # Normalize entire volume consistently (important for consistent viewing in 3D Slicer)
+                # This prevents apparent "zooming" when scrolling through slices
+                volume_min = volume_3d.min()
+                volume_max = volume_3d.max()
+                if volume_max > volume_min:
+                    volume_3d = (volume_3d - volume_min) / (volume_max - volume_min)
+                    # Scale to HU-like range for CT (typically -1024 to 3071)
+                    volume_3d = volume_3d * 4095 - 1024
+                
                 reconstructed_volumes[axis] = volume_3d
                 print(f"  ✓ Reconstructed {axis} volume shape: {volume_3d.shape}")
+                print(f"    Intensity range: [{volume_3d.min():.2f}, {volume_3d.max():.2f}]")
                 
-                # Save this view as separate NIfTI
+                # Save this view as separate NIfTI with proper spacing
                 output_path = output_dir / f"{patient_id}_reconstructed_{axis}.nii.gz"
-                nii_img = nib.Nifti1Image(volume_3d, np.eye(4))
+                # Create affine matrix with proper voxel spacing (in mm)
+                # Assuming isotropic 1mm spacing for 128x128x128 volume
+                affine = np.eye(4)
+                affine[0, 0] = 1.0  # x spacing
+                affine[1, 1] = 1.0  # y spacing  
+                affine[2, 2] = 1.0  # z spacing
+                nii_img = nib.Nifti1Image(volume_3d.astype(np.float32), affine)
                 nib.save(nii_img, str(output_path))
                 print(f"  ✓ Saved {axis} volume to: {output_path.name}")
             
