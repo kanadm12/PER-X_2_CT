@@ -166,6 +166,11 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', comp
                 'file_path_': [dummy_filepath],  # Dummy file path in expected format
             }
             
+            print(f"  Batch PA shape: {batch['PA'].shape}, Lateral shape: {batch['Lateral'].shape}")
+            print(f"  Batch PA_cam shape: {batch['PA_cam'].shape}, Lateral_cam shape: {batch['Lateral_cam'].shape}")
+            print(f"  PA tensor min/max: {batch['PA'].min():.4f}/{batch['PA'].max():.4f}")
+            print(f"  Lateral tensor min/max: {batch['Lateral'].min():.4f}/{batch['Lateral'].max():.4f}")
+            
             # Use log_images method for inference (this is what the test script uses)
             output = model.log_images(batch, split='val', p0=None, zoom_size=None)
             
