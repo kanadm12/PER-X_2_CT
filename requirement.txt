@@ -37,7 +37,7 @@ dicom2nifti==2.3.2
 docker-pycreds==0.4.0
 dominate==2.6.0
 easydict==1.9
-elasticdeform==0.4.9
+elasticdeform==0.5.0
 entrypoints==0.4
 filelock==3.6.0
 fonttools==4.28.5
