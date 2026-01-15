@@ -59,9 +59,14 @@ def preprocess_drr(drr_path, target_size=128):
     # Convert to numpy array (H, W)
     img_array = np.array(img, dtype=np.float32)
     
-    # Create 3-channel image by replicating grayscale (3, H, W) format
-    # Keep pixel values in [0, 255] range for the model's transform to normalize
-    img_array = np.stack([img_array, img_array, img_array], axis=0)  # (3, H, W)
+    # Normalize to [0, 1] range (matching training data preprocessing)
+    # Training uses: Normalization(XRAY_MIN_MAX[0], XRAY_MIN_MAX[1]) where XRAY_MIN_MAX = [0, 255]
+    img_array = img_array / 255.0
+    
+    # Create 3-channel image by replicating grayscale (H, W, 3) format
+    # Training data does: np.concatenate((image, image, image), axis=-1)
+    img_array = np.expand_dims(img_array, -1)  # (H, W, 1)
+    img_array = np.concatenate([img_array, img_array, img_array], axis=-1)  # (H, W, 3)
     
     return img_array
 
@@ -126,10 +131,10 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', comp
         except Exception as e:
             print(f"  Warning: Could not load GT CT: {e}")
     
-    # Convert to torch tensors and add batch dimension
-    # Images are already in (C, H, W) format from preprocessing, just add batch dim
-    pa_tensor = torch.from_numpy(pa_img).unsqueeze(0).to(device).float()  # (1, 3, H, W)
-    lat_tensor = torch.from_numpy(lat_img).unsqueeze(0).to(device).float()  # (1, 3, H, W)
+    # Convert to torch tensors: (H, W, 3) -> (3, H, W) and add batch dimension
+    # This matches the ToTensor() transform in training data preprocessing
+    pa_tensor = torch.from_numpy(pa_img).permute(2, 0, 1).unsqueeze(0).to(device).float()  # (1, 3, H, W)
+    lat_tensor = torch.from_numpy(lat_img).permute(2, 0, 1).unsqueeze(0).to(device).float()  # (1, 3, H, W)
     
     print(f"  Input tensor shapes - PA: {pa_tensor.shape}, Lateral: {lat_tensor.shape}")
     
