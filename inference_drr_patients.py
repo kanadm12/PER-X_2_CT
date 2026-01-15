@@ -150,6 +150,8 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', comp
             max_slice_idx = 127  # 128 slices (0-127)
             
             # Reconstruct from all three anatomical views
+            # The same PA/Lateral DRR pair is used to reconstruct slices from all three orientations
+            # The model uses implicit neural representation (NeRF) to query different spatial positions
             anatomical_axes = ['sagittal', 'axial', 'coronal']
             reconstructed_volumes = {}
             
