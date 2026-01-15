@@ -150,9 +150,9 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', comp
             print(f"  Reconstructing {num_slices} CT slices...")
             reconstructed_volume = []
             
-            # Determine valid slice range from config (typically 0 to ct_size-1)
-            # The model expects slice indices within the training CT volume size
-            max_slice_idx = 319  # ct_size is 320, so valid indices are 0-319
+            # Determine valid slice range - the model creates transformed_points based on image resolution
+            # For 128x128 input images, valid slice indices are 0-127
+            max_slice_idx = 127  # 128 slices (0-127)
             
             # Iterate through slice positions
             for slice_idx in range(num_slices):
