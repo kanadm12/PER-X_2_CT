@@ -131,10 +131,11 @@ def run_inference_on_patient(model, patient_dir, output_dir, device='cuda', comp
         except Exception as e:
             print(f"  Warning: Could not load GT CT: {e}")
     
-    # Convert to torch tensors: (H, W, 3) -> (3, H, W) and add batch dimension
-    # This matches the ToTensor() transform in training data preprocessing
-    pa_tensor = torch.from_numpy(pa_img).permute(2, 0, 1).unsqueeze(0).to(device).float()  # (1, 3, H, W)
-    lat_tensor = torch.from_numpy(lat_img).permute(2, 0, 1).unsqueeze(0).to(device).float()  # (1, 3, H, W)
+    # Convert to torch tensors in (B, H, W, C) format (NOT (B, C, H, W))
+    # The model's get_input() will do permute(0, 3, 1, 2) to convert to (B, C, H, W)
+    # So we keep data in (H, W, C) format and just add batch dimension
+    pa_tensor = torch.from_numpy(pa_img).unsqueeze(0).to(device).float()  # (1, H, W, 3)
+    lat_tensor = torch.from_numpy(lat_img).unsqueeze(0).to(device).float()  # (1, H, W, 3)
     
     print(f"  Input tensor shapes - PA: {pa_tensor.shape}, Lateral: {lat_tensor.shape}")
     
