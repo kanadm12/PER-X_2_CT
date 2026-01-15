@@ -60,7 +60,9 @@ class PerspectiveConcatAfterINRGLNet(nn.Module):
         l_features = None
         g_features = None
         # src_image: (B x C x H x W), src_campose : (B x 2)
-        for src_image, src_campose in zip(src_images, src_camposes):
+        print(f"[model_global] src_images shape: {src_images.shape}")
+        for i, (src_image, src_campose) in enumerate(zip(src_images, src_camposes)):
+            print(f"[model_global] Iteration {i} - src_image shape: {src_image.shape}")
             feature_dict = self.cond_encoder(src_image)  # (B * C * H * W, for clip, [:, 64, 80, 80])
             global_feature = feature_dict['global'].squeeze(-1).squeeze(-1).unsqueeze(1)  # (B x 1 x C)
             local_feature = feature_dict['local']

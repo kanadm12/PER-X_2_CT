@@ -299,9 +299,12 @@ class INRGLEncoderZoomAxisInAlignNeRF(nn.Module):
             src_imgs = []
             src_camposes = []
             for cond_key in self.cond_list:
+                print(f"[INRGLEncoder] Before append - {cond_key} shape: {inputs[cond_key].shape}")
                 src_imgs.append(inputs[cond_key])
                 src_camposes.append(inputs[f"{cond_key}_cam"])
+            print(f"[INRGLEncoder] Before stack - src_imgs shapes: {[x.shape for x in src_imgs]}")
             src_imgs = torch.stack(src_imgs, dim=0)  # src_images : NS x B x C x H x W
+            print(f"[INRGLEncoder] After stack - src_imgs shape: {src_imgs.shape}")
             src_camposes = torch.stack(src_camposes, dim=0)  # src_camposes : (NS x B x 2), 2 is pitch and yaw or None
             latent_zs_dict = self.network_fn.encode(src_imgs, src_camposes, transformed_points[..., :3])
 
