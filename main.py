@@ -15,7 +15,11 @@ from omegaconf import OmegaConf
 from taming.data.utils import custom_collate
 from pytorch_lightning import seed_everything
 from pytorch_lightning.trainer import Trainer
-from pytorch_lightning.utilities.distributed import rank_zero_only
+# Fix for PyTorch Lightning compatibility
+try:
+    from pytorch_lightning.utilities.distributed import rank_zero_only
+except ImportError:
+    from pytorch_lightning.utilities.rank_zero import rank_zero_only
 from pytorch_lightning.callbacks import ModelCheckpoint, Callback, LearningRateMonitor
 from torch.utils.data import DataLoader, Dataset
 
