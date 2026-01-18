@@ -160,9 +160,9 @@ class AEModel(pl.LightningModule):
         discloss, log_dict_disc = self.loss(qloss, x, xrec_dict, 1, self.global_step,
                                             last_layer=self.get_last_layer(), split="val")
         log_dict_ae['val/psnr'] = self.psnr(xrec_dict["outputs"], x)
-        self.log(self.monitor, log_dict_ae[self.monitor], prog_bar=True, logger=True, on_step=False, on_epoch=True, sync_dist=True)
-        self.log_dict(log_dict_ae)
-        self.log_dict(log_dict_disc)
+        # Merge all logs to avoid duplicate logging issues
+        all_logs = {**log_dict_ae, **log_dict_disc}
+        self.log_dict(all_logs, prog_bar=True, logger=True, on_step=False, on_epoch=True, sync_dist=True)
         self.print_loss(log_dict_ae)
         return self.log_dict
 
@@ -318,9 +318,9 @@ class INRAEModel(AEModel):
         discloss, log_dict_disc = self.loss(qloss, x, xrec_dict, 1, self.global_step,
                                             last_layer=self.get_last_layer(), split="val")
         log_dict_ae['val/psnr'] = self.psnr(xrec_dict["outputs"], x)
-        self.log(self.monitor, log_dict_ae[self.monitor], prog_bar=True, logger=True, on_step=False, on_epoch=True, sync_dist=True)
-        self.log_dict(log_dict_ae)
-        self.log_dict(log_dict_disc)
+        # Merge all logs to avoid duplicate logging issues
+        all_logs = {**log_dict_ae, **log_dict_disc}
+        self.log_dict(all_logs, prog_bar=True, logger=True, on_step=False, on_epoch=True, sync_dist=True)
         self.print_loss(log_dict_ae)
         return self.log_dict
 
@@ -479,9 +479,9 @@ class INRAEModelMultiDecoderOut(INRAEModel):
     def validation_step(self, batch, batch_idx):
         aeloss, log_dict_ae = self.shared_step(batch, 'val', 0)
         discloss, log_dict_disc = self.shared_step(batch, 'val', 1)
-        self.log(self.monitor, log_dict_ae[self.monitor], prog_bar=True, logger=True, on_step=False, on_epoch=True, sync_dist=True)
-        self.log_dict(log_dict_ae)
-        self.log_dict(log_dict_disc)
+        # Merge all logs to avoid duplicate logging issues
+        all_logs = {**log_dict_ae, **log_dict_disc}
+        self.log_dict(all_logs, prog_bar=True, logger=True, on_step=False, on_epoch=True, sync_dist=True)
         self.print_loss(log_dict_ae)
         return self.log_dict
 
@@ -633,9 +633,9 @@ class INRAEUNetModel(INRAEModel):
         discloss, log_dict_disc = self.loss(qloss, x, xrec_dict, 1, self.global_step,
                                             last_layer=self.get_last_layer(), split="val")
         log_dict_ae['val/psnr'] = self.psnr(xrec_dict["outputs"], x)
-        self.log(self.monitor, log_dict_ae[self.monitor], prog_bar=True, logger=True, on_step=False, on_epoch=True, sync_dist=True)
-        self.log_dict(log_dict_ae)
-        self.log_dict(log_dict_disc)
+        # Merge all logs to avoid duplicate logging issues
+        all_logs = {**log_dict_ae, **log_dict_disc}
+        self.log_dict(all_logs, prog_bar=True, logger=True, on_step=False, on_epoch=True, sync_dist=True)
         self.print_loss(log_dict_ae)
         return self.log_dict
 
@@ -791,9 +791,9 @@ class INRAETemplateModel(AEModel):
         discloss, log_dict_disc = self.loss(qloss, x, xrec, 1, self.global_step,
                                             last_layer=self.get_last_layer(), split="val")
         log_dict_ae['val/psnr'] = self.psnr(xrec["outputs"], x)
-        self.log(self.monitor, log_dict_ae[self.monitor], prog_bar=True, logger=True, on_step=False, on_epoch=True, sync_dist=True)
-        self.log_dict(log_dict_ae)
-        self.log_dict(log_dict_disc)
+        # Merge all logs to avoid duplicate logging issues
+        all_logs = {**log_dict_ae, **log_dict_disc}
+        self.log_dict(all_logs, prog_bar=True, logger=True, on_step=False, on_epoch=True, sync_dist=True)
         self.print_loss(log_dict_ae)
         return self.log_dict
 

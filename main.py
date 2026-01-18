@@ -274,8 +274,8 @@ class CheckpointEveryNEpochs(pl.Callback):
         self.prefix = prefix
         self.use_modelcheckpoint_filename = use_modelcheckpoint_filename
 
-    def on_batch_end(self, trainer: pl.Trainer, _):
-        """ Check if we should save a checkpoint after every train batch """
+    def on_train_epoch_end(self, trainer: pl.Trainer, pl_module):
+        """ Check if we should save a checkpoint after every epoch """
         epoch = trainer.current_epoch
         if epoch % self.save_epoch_frequency == 0:
             if self.use_modelcheckpoint_filename:
@@ -403,10 +403,10 @@ class ImageLogger(Callback):
             return True
         return False
 
-    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         self.log_img(pl_module, batch, batch_idx, split="train")
 
-    def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
+    def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):
         self.log_img(pl_module, batch, batch_idx, split="val")
 
 

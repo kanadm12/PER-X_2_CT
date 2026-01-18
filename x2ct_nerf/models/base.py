@@ -112,10 +112,9 @@ class BaseModel(pl.LightningModule):
         aeloss, log_dict_ae = self.loss(x, xrec, 0, self.global_step, split="val")
         discloss, log_dict_disc = self.loss(x, xrec, 1, self.global_step, split="val")
         log_dict_ae['val/psnr'] = self.psnr(xrec["outputs"], x)
-        self.log(self.monitor, log_dict_ae[self.monitor],
-                 prog_bar=True, logger=True, on_step=False, on_epoch=True, sync_dist=True)
-        self.log_dict(log_dict_ae)
-        self.log_dict(log_dict_disc)
+        # Log all metrics together (avoid duplicate logging)
+        all_logs = {**log_dict_ae, **log_dict_disc}
+        self.log_dict(all_logs, prog_bar=True, logger=True, on_step=False, on_epoch=True, sync_dist=True)
         self.print_loss(log_dict_ae)
         return self.log_dict
 
