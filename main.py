@@ -554,6 +554,24 @@ if __name__ == "__main__":
         modelckpt_cfg = OmegaConf.merge(default_modelckpt_cfg, modelckpt_cfg)
         # Store checkpoint callback to add to callbacks list later
         checkpoint_callback = instantiate_from_config(modelckpt_cfg)
+        
+        # Additional checkpoint callbacks for best PSNR and SSIM
+        checkpoint_psnr = ModelCheckpoint(
+            dirpath=ckptdir,
+            filename="best_psnr-{epoch:06}-{val/psnr:.4f}",
+            monitor="val/psnr",
+            mode="max",
+            save_top_k=1,
+            verbose=True,
+        )
+        checkpoint_ssim = ModelCheckpoint(
+            dirpath=ckptdir,
+            filename="best_ssim-{epoch:06}-{val/ssim:.4f}",
+            monitor="val/ssim",
+            mode="max",
+            save_top_k=1,
+            verbose=True,
+        )
 
         # add callback which sets up log directory
         default_callbacks_cfg = {
@@ -598,8 +616,10 @@ if __name__ == "__main__":
         callbacks_cfg = lightning_config.get("callbacks", OmegaConf.create())
         callbacks_cfg = OmegaConf.merge(default_callbacks_cfg, callbacks_cfg)
         callbacks_list = [instantiate_from_config(callbacks_cfg[k]) for k in callbacks_cfg]
-        # Add checkpoint callback to callbacks list (instead of deprecated checkpoint_callback param)
-        callbacks_list.append(checkpoint_callback)
+        # Add checkpoint callbacks to callbacks list (instead of deprecated checkpoint_callback param)
+        callbacks_list.append(checkpoint_callback)  # best rec_loss
+        callbacks_list.append(checkpoint_psnr)       # best PSNR
+        callbacks_list.append(checkpoint_ssim)       # best SSIM
         trainer_kwargs["callbacks"] = callbacks_list
         # Enable progress bar (removed progress_bar_refresh_rate=0)
         trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
