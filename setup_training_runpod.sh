@@ -27,20 +27,10 @@ fi
 
 echo "Working directory: $(pwd)"
 
-# 2. Create conda environment if it doesn't exist
-if ! conda env list | grep -q "perx2ct"; then
-    echo "Creating conda environment..."
-    conda create -n perx2ct python=3.8 -y
-fi
-
-# 3. Activate environment
-echo "Activating environment..."
-source activate perx2ct
-
-# 4. Install dependencies
+# 2. Install dependencies
 echo "Installing dependencies..."
 pip install --upgrade pip
-pip install torch==1.8.1+cu111 torchvision==0.9.1+cu111 torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html
+pip install torch torchvision torchaudio
 pip install -r requirement.txt
 
 # 5. Check if custom dataset exists
