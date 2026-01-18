@@ -31,7 +31,7 @@ echo "Working directory: $(pwd)"
 echo "Installing dependencies..."
 pip install --upgrade pip
 pip install torch torchvision torchaudio
-pip install -r requirement.txt
+pip install -r requirements_flexible.txt
 
 # 5. Check if custom dataset exists
 DATA_DIR="/workspace/drr_patient_data"
