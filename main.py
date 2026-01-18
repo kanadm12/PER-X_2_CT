@@ -1,7 +1,6 @@
 import os
 import sys
 import glob
-import wandb
 import datetime
 import argparse
 import importlib
@@ -9,6 +8,9 @@ import numpy as np
 import torch
 import torchvision
 import pytorch_lightning as pl
+
+# Set float32 matmul precision for better performance on modern GPUs
+torch.set_float32_matmul_precision('medium')
 
 from PIL import Image
 from omegaconf import OmegaConf
@@ -220,8 +222,6 @@ class SetupCallback(Callback):
 
     def on_fit_start(self, trainer, pl_module):
         if trainer.global_rank == 0:
-            update_config = OmegaConf.to_container(self.config, resolve=True)
-            wandb.config.update(update_config, allow_val_change=True)
             # Create logdirs and save configs
             os.makedirs(self.logdir, exist_ok=True)
             os.makedirs(self.ckptdir, exist_ok=True)
@@ -423,7 +423,8 @@ if __name__ == "__main__":
     print(f"max_step : {opt.max_step}")
 
     if opt.wandb_id is None:
-        opt.wandb_id = wandb.util.generate_id()
+        import uuid
+        opt.wandb_id = str(uuid.uuid4())[:8]
 
     if opt.name and opt.resume:
         raise ValueError(
