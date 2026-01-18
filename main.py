@@ -218,7 +218,7 @@ class SetupCallback(Callback):
         self.config = config
         self.lightning_config = lightning_config
 
-    def on_pretrain_routine_start(self, trainer, pl_module):
+    def on_fit_start(self, trainer, pl_module):
         if trainer.global_rank == 0:
             update_config = OmegaConf.to_container(self.config, resolve=True)
             wandb.config.update(update_config, allow_val_change=True)
