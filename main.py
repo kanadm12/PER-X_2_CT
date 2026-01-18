@@ -292,7 +292,7 @@ class ImageLogger(Callback):
         self.max_images = max_images
         self.logger_log_images = {
             pl.loggers.WandbLogger: self._wandb,
-            pl.loggers.TestTubeLogger: self._testtube,
+            pl.loggers.TensorBoardLogger: self._tensorboard,
         }
         self.log_steps = [2 ** n for n in range(int(np.log2(self.batch_freq)) + 1)]
         if not increase_log_steps:
@@ -336,7 +336,7 @@ class ImageLogger(Callback):
             wandb.log(image_log, step=pl_module.global_step)
 
     @rank_zero_only
-    def _testtube(self, pl_module, images, batch_idx, split):
+    def _tensorboard(self, pl_module, images, batch_idx, split):
         for k in images:
             grid = torchvision.utils.make_grid(images[k])
             grid = (grid+1.0)/2.0  # -1,1 -> 0,1; c,h,w
@@ -596,7 +596,7 @@ if __name__ == "__main__":
         callbacks_cfg = lightning_config.get("callbacks", OmegaConf.create())
         callbacks_cfg = OmegaConf.merge(default_callbacks_cfg, callbacks_cfg)
         trainer_kwargs["callbacks"] = [instantiate_from_config(callbacks_cfg[k]) for k in callbacks_cfg]
-        trainer_kwargs["progress_bar_refresh_rate"] = 0
+        # Enable progress bar (removed progress_bar_refresh_rate=0)
         trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
 
         # data
