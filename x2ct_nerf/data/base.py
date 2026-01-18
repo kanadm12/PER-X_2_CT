@@ -1,3 +1,4 @@
+import os
 import re
 import numpy as np
 from torch.utils.data import Dataset
@@ -120,9 +121,12 @@ class LIDCMultiInputMultiResTypes(Dataset):
                     dst_txt = f"ct{self.xray_size}_{self.opt['rendering_type']}_xray"
                     image_path = "/".join(path_dirs[:-3]).replace(src_txt, dst_txt)
                     if input_type == 'PA':
-                        image_path = f"{image_path}/{path_dirs[-3]}_xray1.png"
+                        image_path = f"{image_path}/{path_dirs[-3]}_xray1_flipped.png"
                     else:
-                        image_path = f"{image_path}/{path_dirs[-3]}_xray2.png"
+                        image_path = f"{image_path}/{path_dirs[-3]}_xray2_flipped.png"
+                    # Fallback to non-flipped names if flipped versions don't exist
+                    if not os.path.exists(image_path):
+                        image_path = image_path.replace("_flipped.png", ".png")
                     image = self.get_image(image_path)
                     image, src_campose = self.apply_preprocessing_xray_according2cam(image, input_type)
                     image = np.expand_dims(image, -1)
