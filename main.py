@@ -551,7 +551,8 @@ if __name__ == "__main__":
 
         modelckpt_cfg = lightning_config.get("modelcheckpoint", OmegaConf.create())
         modelckpt_cfg = OmegaConf.merge(default_modelckpt_cfg, modelckpt_cfg)
-        trainer_kwargs["checkpoint_callback"] = instantiate_from_config(modelckpt_cfg)
+        # Store checkpoint callback to add to callbacks list later
+        checkpoint_callback = instantiate_from_config(modelckpt_cfg)
 
         # add callback which sets up log directory
         default_callbacks_cfg = {
@@ -595,7 +596,10 @@ if __name__ == "__main__":
 
         callbacks_cfg = lightning_config.get("callbacks", OmegaConf.create())
         callbacks_cfg = OmegaConf.merge(default_callbacks_cfg, callbacks_cfg)
-        trainer_kwargs["callbacks"] = [instantiate_from_config(callbacks_cfg[k]) for k in callbacks_cfg]
+        callbacks_list = [instantiate_from_config(callbacks_cfg[k]) for k in callbacks_cfg]
+        # Add checkpoint callback to callbacks list (instead of deprecated checkpoint_callback param)
+        callbacks_list.append(checkpoint_callback)
+        trainer_kwargs["callbacks"] = callbacks_list
         # Enable progress bar (removed progress_bar_refresh_rate=0)
         trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
 
