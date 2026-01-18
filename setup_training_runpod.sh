@@ -16,8 +16,16 @@ echo "=========================================="
 echo "PerX2CT Training Setup for RunPod"
 echo "=========================================="
 
-# 1. Navigate to the project directory
-cd /workspace/PerX2CT || { echo "Error: PerX2CT directory not found"; exit 1; }
+# 1. Navigate to the project directory (try both possible names)
+if [ -d "/workspace/PER-X_2_CT" ]; then
+    cd /workspace/PER-X_2_CT
+elif [ -d "/workspace/PerX2CT" ]; then
+    cd /workspace/PerX2CT
+else
+    echo "Error: Project directory not found. Running from current directory."
+fi
+
+echo "Working directory: $(pwd)"
 
 # 2. Create conda environment if it doesn't exist
 if ! conda env list | grep -q "perx2ct"; then
