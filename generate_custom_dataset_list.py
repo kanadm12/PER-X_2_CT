@@ -39,6 +39,7 @@ import os
 import glob
 import argparse
 import random
+from pathlib import Path
 
 
 def find_ct_slices_and_xrays(data_dir):
@@ -48,93 +49,85 @@ def find_ct_slices_and_xrays(data_dir):
     """
     ct_slices = []
     
-    # Pattern 1: Standard LIDC format
-    # ./data/LIDC-HDF5-256_ct128_CTSlice/<patient_id>/ct/<plane>_<slice>.h5
-    pattern1_ct = os.path.join(data_dir, "*_CTSlice", "*", "ct", "*.h5")
-    pattern1_xray = os.path.join(data_dir, "*_xray")
+    # Find the processed CT directory
+    data_path = Path(data_dir)
     
-    # Pattern 2: Direct structure
-    # ./data/<patient_id>/ct/<plane>_<slice>.h5
-    pattern2_ct = os.path.join(data_dir, "*", "ct", "*.h5")
+    # Look for H5 files in various patterns
+    patterns = [
+        # Pattern 1: processed_ct128_CTSlice/<patient>/ct/*.h5
+        data_path / "*_CTSlice" / "*" / "ct" / "*.h5",
+        # Pattern 2: Direct <patient>/ct/*.h5
+        data_path / "*" / "ct" / "*.h5",
+        # Pattern 3: Given path is already the CTSlice folder
+        data_path / "*" / "ct" / "*.h5",
+    ]
     
-    # Pattern 3: ct_slices folder structure
-    pattern3_ct = os.path.join(data_dir, "ct_slices", "*", "ct", "*.h5")
-    
-    # Pattern 4: Flattened H5 files
-    pattern4_ct = os.path.join(data_dir, "*.h5")
-    
-    # Try all patterns
     found_files = []
-    for pattern in [pattern1_ct, pattern2_ct, pattern3_ct, pattern4_ct]:
-        files = glob.glob(pattern)
+    for pattern in patterns:
+        files = list(data_path.glob(str(pattern).replace(str(data_path) + "/", "")))
         if files:
             found_files.extend(files)
-            print(f"Found {len(files)} CT slice files with pattern: {pattern}")
+            print(f"Found {len(files)} CT slice files")
+            break
+    
+    if not found_files:
+        # Try direct glob
+        found_files = list(data_path.rglob("*.h5"))
+        if found_files:
+            print(f"Found {len(found_files)} H5 files via recursive search")
     
     if not found_files:
         print(f"WARNING: No CT slice files (.h5) found in {data_dir}")
         print("Please check your data directory structure.")
+        print("Did you run preprocess_custom_data.py first?")
         return []
     
     # Remove duplicates
     found_files = list(set(found_files))
+    
+    # Find the X-ray directory (sibling to CTSlice folder)
+    xray_dir = None
+    for f in found_files:
+        path_str = str(f)
+        if "_CTSlice" in path_str:
+            xray_dir = path_str.split("_CTSlice")[0] + "_plastimatch_xray"
+            break
+    
+    if xray_dir is None:
+        # Try to find xray folder as sibling
+        parent = data_path.parent if data_path.name.endswith("_CTSlice") else data_path
+        xray_candidates = list(parent.glob("*_xray")) + list(parent.glob("*_plastimatch_xray"))
+        if xray_candidates:
+            xray_dir = str(xray_candidates[0])
+    
+    print(f"Looking for X-rays in: {xray_dir}")
     
     # Validate that corresponding X-ray images exist
     valid_slices = []
     missing_xrays = set()
     
     for ct_path in found_files:
-        # Normalize path
-        ct_path = ct_path.replace("\\", "/")
+        ct_path_str = str(ct_path).replace("\\", "/")
         
-        # Extract patient ID and find corresponding X-rays
-        path_parts = ct_path.split("/")
-        
-        # Try to find patient ID from path
+        # Extract patient ID from path
+        path_parts = ct_path_str.split("/")
         patient_id = None
-        ct_folder_idx = None
         for i, part in enumerate(path_parts):
             if part == "ct" and i > 0:
                 patient_id = path_parts[i-1]
-                ct_folder_idx = i - 1
                 break
         
-        if patient_id is None:
-            # Try another approach - just use the parent folder name
-            if len(path_parts) >= 2:
-                patient_id = path_parts[-3] if len(path_parts) >= 3 else path_parts[-2]
-        
-        if patient_id:
-            # Try multiple possible X-ray locations
-            xray_found = False
+        if patient_id and xray_dir:
+            xray1 = os.path.join(xray_dir, f"{patient_id}_xray1.png")
+            xray2 = os.path.join(xray_dir, f"{patient_id}_xray2.png")
             
-            # Location 1: Same base directory with _xray suffix
-            base_dir = "/".join(path_parts[:ct_folder_idx]) if ct_folder_idx else os.path.dirname(os.path.dirname(ct_path))
-            
-            # Try various X-ray path patterns
-            xray_patterns = [
-                f"{base_dir}/{patient_id}_xray1.png",
-                f"{base_dir}/{patient_id}_xray2.png",
-                f"{base_dir}/xray/{patient_id}_xray1.png",
-                f"{base_dir}/xrays/{patient_id}_xray1.png",
-            ]
-            
-            # Also check for xray folder that matches CT folder pattern
-            if "_CTSlice" in ct_path:
-                xray_base = ct_path.split("_CTSlice")[0] + "_plastimatch_xray"
-                xray_patterns.extend([
-                    f"{xray_base}/{patient_id}_xray1.png",
-                ])
-            
-            for xray_path in xray_patterns:
-                if os.path.exists(xray_path):
-                    xray_found = True
-                    break
-            
-            if xray_found:
-                valid_slices.append(ct_path)
+            if os.path.exists(xray1) and os.path.exists(xray2):
+                valid_slices.append(ct_path_str)
             else:
                 missing_xrays.add(patient_id)
+        elif patient_id:
+            # No xray_dir found, include anyway
+            valid_slices.append(ct_path_str)
     
     if missing_xrays:
         print(f"\nWARNING: {len(missing_xrays)} patients have missing X-ray images:")

@@ -49,7 +49,19 @@ echo "Contents of $DATA_DIR:"
 ls -la "$DATA_DIR" | head -20
 echo ""
 
-# 7. Generate dataset list files
+# 7. Check if data needs preprocessing (NIfTI to H5 conversion)
+PROCESSED_DIR="$DATA_DIR/processed_ct128_CTSlice"
+if [ ! -d "$PROCESSED_DIR" ]; then
+    echo "Preprocessing data (converting NIfTI to H5 slices)..."
+    python preprocess_custom_data.py --data_dir "$DATA_DIR" --ct_size 128
+    DATA_DIR="$PROCESSED_DIR"
+else
+    echo "Found preprocessed data at $PROCESSED_DIR"
+    DATA_DIR="$PROCESSED_DIR"
+fi
+echo ""
+
+# 8. Generate dataset list files
 echo "Generating dataset list files..."
 python generate_custom_dataset_list.py \
     --data_dir "$DATA_DIR" \
