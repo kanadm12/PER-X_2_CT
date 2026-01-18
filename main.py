@@ -517,15 +517,15 @@ if __name__ == "__main__":
                     "tags": opt.wandb_tags
                 }
             },
-            "testtube": {
-                "target": "pytorch_lightning.loggers.TestTubeLogger",
+            "tensorboard": {
+                "target": "pytorch_lightning.loggers.TensorBoardLogger",
                 "params": {
-                    "name": "testtube",
+                    "name": "tensorboard",
                     "save_dir": logdir,
                 }
             },
         }
-        default_logger_cfg = default_logger_cfgs["testtube"]
+        default_logger_cfg = default_logger_cfgs["tensorboard"]
         #default_logger_cfg = default_logger_cfgs["wandb"]
         logger_cfg = lightning_config.get("logger", OmegaConf.create())
         logger_cfg = OmegaConf.merge(default_logger_cfg, logger_cfg)
