@@ -527,7 +527,7 @@ if __name__ == "__main__":
         }
         #default_logger_cfg = default_logger_cfgs["testtube"]
         default_logger_cfg = default_logger_cfgs["wandb"]
-        logger_cfg = lightning_config.logger or OmegaConf.create()
+        logger_cfg = lightning_config.get("logger", OmegaConf.create())
         logger_cfg = OmegaConf.merge(default_logger_cfg, logger_cfg)
         trainer_kwargs["logger"] = instantiate_from_config(logger_cfg)
 
@@ -549,7 +549,7 @@ if __name__ == "__main__":
             if 'loss' in model.monitor:
                 default_modelckpt_cfg["params"]["mode"] = "min"
 
-        modelckpt_cfg = lightning_config.modelcheckpoint or OmegaConf.create()
+        modelckpt_cfg = lightning_config.get("modelcheckpoint", OmegaConf.create())
         modelckpt_cfg = OmegaConf.merge(default_modelckpt_cfg, modelckpt_cfg)
         trainer_kwargs["checkpoint_callback"] = instantiate_from_config(modelckpt_cfg)
 
@@ -593,7 +593,7 @@ if __name__ == "__main__":
                 }
             }
 
-        callbacks_cfg = lightning_config.callbacks or OmegaConf.create()
+        callbacks_cfg = lightning_config.get("callbacks", OmegaConf.create())
         callbacks_cfg = OmegaConf.merge(default_callbacks_cfg, callbacks_cfg)
         trainer_kwargs["callbacks"] = [instantiate_from_config(callbacks_cfg[k]) for k in callbacks_cfg]
         trainer_kwargs["progress_bar_refresh_rate"] = 0
