@@ -23,6 +23,9 @@ import argparse
 from tqdm import tqdm
 import imageio
 import math
+from skimage.metrics import peak_signal_noise_ratio as psnr
+from skimage.metrics import structural_similarity as ssim
+from skimage.transform import resize
 
 
 def load_model(config_path, ckpt_path, device='cuda'):
@@ -168,19 +171,25 @@ def find_patient_files(patient_dir):
 
 
 def process_patient(model, patient_dir, output_dir, device, compare_gt=False):
-    """Process a single patient's DRR data"""
+    """
+    Process a single patient's DRR data.
+    
+    Returns:
+        dict with keys: 'success', 'psnr', 'ssim' (metrics are None if no GT available)
+    """
     patient_dir = Path(patient_dir)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
     patient_id = patient_dir.name
+    result = {'success': False, 'psnr': None, 'ssim': None}
     
     # Find files
     pa_drr, lat_drr, gt_ct_path = find_patient_files(patient_dir)
     
     if pa_drr is None or lat_drr is None:
         print(f"  ⚠ Skipping {patient_id}: Missing PA or Lateral DRR")
-        return False
+        return result
     
     print(f"\n{'='*50}")
     print(f"Patient: {patient_id}")
@@ -237,26 +246,51 @@ def process_patient(model, patient_dir, output_dir, device, compare_gt=False):
             gt_nii = nib.load(gt_ct_path)
             gt_ct = gt_nii.get_fdata()
             
-            # Get middle slices for comparison
-            gt_mid = gt_ct[:, :, gt_ct.shape[2] // 2]
+            # Resize GT to match reconstructed volume if needed
+            if gt_ct.shape != volume_hu.shape:
+                gt_ct_resized = resize(gt_ct, volume_hu.shape, preserve_range=True, anti_aliasing=True)
+            else:
+                gt_ct_resized = gt_ct
             
-            # Resize GT to match if needed
+            # Normalize both volumes to [0, 1] for metric computation
+            recon_norm = (volume_hu - volume_hu.min()) / (volume_hu.max() - volume_hu.min() + 1e-8)
+            gt_norm = (gt_ct_resized - gt_ct_resized.min()) / (gt_ct_resized.max() - gt_ct_resized.min() + 1e-8)
+            
+            # Compute 3D PSNR
+            psnr_3d = psnr(gt_norm, recon_norm, data_range=1.0)
+            
+            # Compute 3D SSIM (compute per slice and average for memory efficiency)
+            ssim_slices = []
+            for s in range(volume_hu.shape[2]):
+                ssim_val = ssim(gt_norm[:, :, s], recon_norm[:, :, s], data_range=1.0)
+                ssim_slices.append(ssim_val)
+            ssim_3d = np.mean(ssim_slices)
+            
+            result['psnr'] = psnr_3d
+            result['ssim'] = ssim_3d
+            
+            print(f"  ✓ PSNR: {psnr_3d:.2f} dB")
+            print(f"  ✓ SSIM: {ssim_3d:.4f}")
+            
+            # Get middle slices for comparison visualization
+            gt_mid = gt_ct[:, :, gt_ct.shape[2] // 2]
             if gt_mid.shape != mid_slice.shape:
-                from skimage.transform import resize
                 gt_mid = resize(gt_mid, mid_slice.shape, preserve_range=True)
             
-            # Normalize both for visualization
+            # Normalize for visualization
             gt_vis = ((gt_mid - gt_mid.min()) / (gt_mid.max() - gt_mid.min() + 1e-8) * 255).astype(np.uint8)
             
-            # Side by side comparison
+            # Side by side comparison with metrics annotation
             comparison = np.concatenate([mid_slice_vis, gt_vis], axis=1)
             comp_path = output_dir / f"{patient_id}_comparison.png"
             imageio.imwrite(str(comp_path), comparison)
             print(f"  ✓ Saved comparison: {comp_path.name}")
+            
         except Exception as e:
             print(f"  ⚠ Could not load GT for comparison: {e}")
     
-    return True
+    result['success'] = True
+    return result
 
 
 def main():
@@ -309,15 +343,50 @@ def main():
     # Process each patient
     results = []
     for patient_dir in patient_dirs:
-        success = process_patient(model, patient_dir, args.output_dir, args.device, args.compare_gt)
-        results.append((patient_dir.name, success))
+        result = process_patient(model, patient_dir, args.output_dir, args.device, args.compare_gt)
+        results.append((patient_dir.name, result))
     
     # Summary
     print("\n" + "="*60)
     print("SUMMARY")
     print("="*60)
-    successful = sum(1 for _, s in results if s)
+    successful = sum(1 for _, r in results if r['success'])
     print(f"Successfully processed: {successful}/{len(results)} patients")
+    
+    # Compute average metrics if available
+    psnr_values = [r['psnr'] for _, r in results if r['psnr'] is not None]
+    ssim_values = [r['ssim'] for _, r in results if r['ssim'] is not None]
+    
+    if psnr_values:
+        avg_psnr = np.mean(psnr_values)
+        std_psnr = np.std(psnr_values)
+        avg_ssim = np.mean(ssim_values)
+        std_ssim = np.std(ssim_values)
+        
+        print("\n" + "-"*40)
+        print("METRICS (vs Ground Truth)")
+        print("-"*40)
+        print(f"  Patients evaluated: {len(psnr_values)}")
+        print(f"  Average PSNR: {avg_psnr:.2f} ± {std_psnr:.2f} dB")
+        print(f"  Average SSIM: {avg_ssim:.4f} ± {std_ssim:.4f}")
+        print("-"*40)
+        
+        # Per-patient breakdown
+        print("\nPer-patient metrics:")
+        for patient_name, r in results:
+            if r['psnr'] is not None:
+                print(f"  {patient_name}: PSNR={r['psnr']:.2f} dB, SSIM={r['ssim']:.4f}")
+        
+        # Save metrics to CSV
+        metrics_path = Path(args.output_dir) / "metrics.csv"
+        with open(metrics_path, 'w') as f:
+            f.write("patient,psnr_db,ssim\n")
+            for patient_name, r in results:
+                if r['psnr'] is not None:
+                    f.write(f"{patient_name},{r['psnr']:.4f},{r['ssim']:.6f}\n")
+            f.write(f"AVERAGE,{avg_psnr:.4f},{avg_ssim:.6f}\n")
+            f.write(f"STD,{std_psnr:.4f},{std_ssim:.6f}\n")
+        print(f"\n✓ Metrics saved to: {metrics_path}")
     
     if successful > 0:
         print(f"\nOutputs saved to: {args.output_dir}")
@@ -327,6 +396,7 @@ def main():
         print("  - {patient}_middle_slice.png      (Preview)")
         if args.compare_gt:
             print("  - {patient}_comparison.png        (Recon vs GT)")
+            print("  - metrics.csv                     (All patient metrics)")
 
 
 if __name__ == "__main__":
