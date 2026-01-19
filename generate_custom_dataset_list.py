@@ -102,33 +102,61 @@ def find_ct_slices_and_xrays(data_dir):
     
     print(f"Looking for X-rays in: {xray_dir}")
     
-    # Validate that corresponding X-ray images exist
-    valid_slices = []
-    missing_xrays = set()
+    # Pre-load all existing X-ray files for fast lookup
+    existing_xrays = set()
+    if xray_dir and os.path.exists(xray_dir):
+        print("Building X-ray file index...")
+        for f in os.listdir(xray_dir):
+            if f.endswith('.png'):
+                existing_xrays.add(f)
+        print(f"Found {len(existing_xrays)} X-ray files")
+    
+    # Extract unique patient IDs and validate X-rays exist
+    print("Extracting patient IDs and validating...")
+    patient_ids_with_xrays = set()
+    all_patient_ids = set()
+    
+    # Sample first file to understand path structure
+    sample_path = str(found_files[0]).replace("\\", "/")
+    path_parts = sample_path.split("/")
     
     for ct_path in found_files:
         ct_path_str = str(ct_path).replace("\\", "/")
-        
-        # Extract patient ID from path
         path_parts = ct_path_str.split("/")
+        
+        # Extract patient ID
         patient_id = None
         for i, part in enumerate(path_parts):
             if part == "ct" and i > 0:
                 patient_id = path_parts[i-1]
                 break
         
-        if patient_id and xray_dir:
-            xray1 = os.path.join(xray_dir, f"{patient_id}_xray1.png")
-            xray2 = os.path.join(xray_dir, f"{patient_id}_xray2.png")
-            
-            if os.path.exists(xray1) and os.path.exists(xray2):
-                valid_slices.append(ct_path_str)
-            else:
-                missing_xrays.add(patient_id)
-        elif patient_id:
-            # No xray_dir found, include anyway
+        if patient_id:
+            all_patient_ids.add(patient_id)
+            # Check for X-rays (both naming conventions)
+            if (f"{patient_id}_xray1.png" in existing_xrays or 
+                f"{patient_id}_xray1_flipped.png" in existing_xrays):
+                patient_ids_with_xrays.add(patient_id)
+    
+    print(f"Total patients: {len(all_patient_ids)}")
+    print(f"Patients with X-rays: {len(patient_ids_with_xrays)}")
+    
+    # Now filter slices to only include patients with X-rays
+    valid_slices = []
+    for ct_path in found_files:
+        ct_path_str = str(ct_path).replace("\\", "/")
+        path_parts = ct_path_str.split("/")
+        
+        patient_id = None
+        for i, part in enumerate(path_parts):
+            if part == "ct" and i > 0:
+                patient_id = path_parts[i-1]
+                break
+        
+        if patient_id in patient_ids_with_xrays:
             valid_slices.append(ct_path_str)
     
+    missing_xrays = all_patient_ids - patient_ids_with_xrays
     if missing_xrays:
         print(f"\nWARNING: {len(missing_xrays)} patients have missing X-ray images:")
         for pid in list(missing_xrays)[:5]:
