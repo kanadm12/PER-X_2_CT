@@ -65,9 +65,19 @@ def normalize_ct(volume, min_val=-1000, max_val=2500):
     return volume.astype(np.float32)
 
 
-def process_patient(patient_dir, output_ct_dir, output_xray_dir, ct_size=128):
+def process_patient(patient_dir, output_ct_dir, output_xray_dir, ct_size=128, skip_existing=True):
     """Process a single patient's data."""
     patient_id = os.path.basename(patient_dir)
+    
+    # Check if already preprocessed (skip if all expected files exist)
+    patient_ct_dir = os.path.join(output_ct_dir, patient_id, "ct")
+    xray1_path = os.path.join(output_xray_dir, f"{patient_id}_xray1_flipped.png")
+    xray2_path = os.path.join(output_xray_dir, f"{patient_id}_xray2_flipped.png")
+    last_axial = os.path.join(patient_ct_dir, f"axial_{ct_size-1:03d}.h5")
+    
+    if skip_existing:
+        if os.path.exists(last_axial) and os.path.exists(xray1_path) and os.path.exists(xray2_path):
+            return "skipped"
     
     # Find NIfTI file
     nii_files = glob.glob(os.path.join(patient_dir, "*.nii.gz"))
@@ -92,7 +102,6 @@ def process_patient(patient_dir, output_ct_dir, output_xray_dir, ct_size=128):
     lat_path = lat_files[0]
     
     # Create output directories
-    patient_ct_dir = os.path.join(output_ct_dir, patient_id, "ct")
     os.makedirs(patient_ct_dir, exist_ok=True)
     os.makedirs(output_xray_dir, exist_ok=True)
     
@@ -162,10 +171,13 @@ def main():
                         help="Path to raw patient data")
     parser.add_argument("--ct_size", type=int, default=128,
                         help="Target CT resolution (default: 128)")
+    parser.add_argument("--force", action="store_true",
+                        help="Force reprocessing of already processed patients")
     args = parser.parse_args()
     
     data_dir = Path(args.data_dir)
     ct_size = args.ct_size
+    skip_existing = not args.force
     
     # Output directories
     output_ct_dir = data_dir / f"processed_ct{ct_size}_CTSlice"
@@ -178,6 +190,7 @@ def main():
     print(f"CT output: {output_ct_dir}")
     print(f"X-ray output: {output_xray_dir}")
     print(f"Target CT resolution: {ct_size}x{ct_size}x{ct_size}")
+    print(f"Skip existing: {skip_existing}")
     print()
     
     # Find all patient directories
@@ -193,9 +206,13 @@ def main():
     
     success = 0
     failed = 0
+    skipped = 0
     
     for patient_dir in tqdm(patient_dirs, desc="Processing patients"):
-        if process_patient(str(patient_dir), str(output_ct_dir), str(output_xray_dir), ct_size):
+        result = process_patient(str(patient_dir), str(output_ct_dir), str(output_xray_dir), ct_size, skip_existing)
+        if result == "skipped":
+            skipped += 1
+        elif result:
             success += 1
         else:
             failed += 1
@@ -203,7 +220,8 @@ def main():
     print()
     print("=" * 60)
     print("Processing Complete!")
-    print(f"Successfully processed: {success} patients")
+    print(f"Newly processed: {success} patients")
+    print(f"Skipped (already done): {skipped} patients")
     print(f"Failed: {failed} patients")
     print()
     print("Next steps:")
