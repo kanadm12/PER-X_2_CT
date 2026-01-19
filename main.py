@@ -532,33 +532,22 @@ if __name__ == "__main__":
         logger_cfg = OmegaConf.merge(default_logger_cfg, logger_cfg)
         trainer_kwargs["logger"] = instantiate_from_config(logger_cfg)
 
-        # modelcheckpoint - use TrainResult/EvalResult(checkpoint_on=metric) to
-        # specify which metric is used to determine best models
-        default_modelckpt_cfg = {
-            "target": "pytorch_lightning.callbacks.ModelCheckpoint",
-            "params": {
-                "dirpath": ckptdir,
-                "filename": "{epoch:06}",
-                "verbose": True,
-                "save_last": True,
-            }
-        }
-        if hasattr(model, "monitor"):
-            print(f"Monitoring {model.monitor} as checkpoint metric.")
-            default_modelckpt_cfg["params"]["monitor"] = model.monitor
-            default_modelckpt_cfg["params"]["save_top_k"] = 1
-            if 'loss' in model.monitor:
-                default_modelckpt_cfg["params"]["mode"] = "min"
-
-        modelckpt_cfg = lightning_config.get("modelcheckpoint", OmegaConf.create())
-        modelckpt_cfg = OmegaConf.merge(default_modelckpt_cfg, modelckpt_cfg)
-        # Store checkpoint callback to add to callbacks list later
-        checkpoint_callback = instantiate_from_config(modelckpt_cfg)
+        # modelcheckpoint - save best models for key metrics
+        # Best reconstruction loss checkpoint
+        checkpoint_loss = ModelCheckpoint(
+            dirpath=ckptdir,
+            filename="best_loss",
+            monitor="val/rec_loss",
+            mode="min",
+            save_top_k=1,
+            verbose=True,
+            save_last=True,  # Also saves last.ckpt
+        )
         
-        # Additional checkpoint callback for best PSNR
+        # Best PSNR checkpoint
         checkpoint_psnr = ModelCheckpoint(
             dirpath=ckptdir,
-            filename="best_psnr-{epoch:06}-{val/psnr:.4f}",
+            filename="best_psnr",
             monitor="val/psnr",
             mode="max",
             save_top_k=1,
@@ -609,9 +598,9 @@ if __name__ == "__main__":
         callbacks_cfg = lightning_config.get("callbacks", OmegaConf.create())
         callbacks_cfg = OmegaConf.merge(default_callbacks_cfg, callbacks_cfg)
         callbacks_list = [instantiate_from_config(callbacks_cfg[k]) for k in callbacks_cfg]
-        # Add checkpoint callbacks to callbacks list (instead of deprecated checkpoint_callback param)
-        callbacks_list.append(checkpoint_callback)  # best rec_loss
-        callbacks_list.append(checkpoint_psnr)       # best PSNR
+        # Add checkpoint callbacks to callbacks list
+        callbacks_list.append(checkpoint_loss)   # best rec_loss + last.ckpt
+        callbacks_list.append(checkpoint_psnr)   # best PSNR
         trainer_kwargs["callbacks"] = callbacks_list
         # Enable progress bar (removed progress_bar_refresh_rate=0)
         trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
