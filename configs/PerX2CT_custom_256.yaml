@@ -105,7 +105,7 @@ data:
         opt:
           num_ctslice_per_item: 1
           xray_size: 256
-          ct_size: 320
+          ct_size: 256  # Must match number of slices per patient
           rendering_type: ${data_projection_type}
           input_type:
           - ${model.params.image_key}
@@ -131,7 +131,7 @@ data:
         opt:
           num_ctslice_per_item: 1
           xray_size: 256
-          ct_size: 320
+          ct_size: 256  # Must match number of slices per patient
           rendering_type: ${data_projection_type}
           input_type:
             - ${model.params.image_key}

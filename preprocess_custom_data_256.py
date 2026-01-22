@@ -93,10 +93,11 @@ def process_ct_volume(nifti_path, output_dir, patient_id, force=False):
         for slice_idx in range(NUM_SLICES):
             ct_slice = volume[:, :, slice_idx]
             
-            # Save as H5
+            # Save as H5 with both 'ct' and 'ctslice' keys for compatibility
             h5_path = output_patient_dir / f"{patient_id}_{slice_idx:03d}.h5"
             with h5py.File(h5_path, 'w') as f:
                 f.create_dataset('ct', data=ct_slice.astype(np.float32), compression='gzip')
+                f.create_dataset('ctslice', data=ct_slice.astype(np.float32), compression='gzip')
             
             slices_saved += 1
         
