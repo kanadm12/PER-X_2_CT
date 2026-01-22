@@ -97,10 +97,22 @@ echo "  Val samples:   $(wc -l < ${DATASET_LIST_DIR}/val.txt)"
 echo "  Test samples:  $(wc -l < ${DATASET_LIST_DIR}/test.txt)"
 
 # =============================================================================
+# STEP 3.5: Validate data loading (catch issues before training)
+# =============================================================================
+echo ""
+echo "[Step 3.5/5] Validating data loading..."
+python validate_data_256.py --config ${CONFIG} --num_samples 5 --batch_size 4
+
+if [ $? -ne 0 ]; then
+    echo "❌ Data validation failed! Please fix issues before training."
+    exit 1
+fi
+
+# =============================================================================
 # STEP 4: Train with multi-GPU
 # =============================================================================
 echo ""
-echo "[Step 4/4] Starting multi-GPU training..."
+echo "[Step 4/5] Starting multi-GPU training..."
 echo ""
 echo "Training Configuration:"
 echo "  GPUs: 0,1,2 (${NUM_GPUS}x A100)"
@@ -109,6 +121,7 @@ echo "  Total batch size: $((32 * NUM_GPUS))"
 echo "  Resolution: 256x256"
 echo "  Max epochs: 20"
 echo "  Discriminator: Enabled (starts at step 30000)"
+echo "  Data loader: Custom256 (fixed X-ray path resolution)"
 echo ""
 
 # Start training

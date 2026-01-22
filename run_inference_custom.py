@@ -27,6 +27,9 @@ from skimage.metrics import peak_signal_noise_ratio as psnr
 from skimage.metrics import structural_similarity as ssim
 from skimage.transform import resize
 
+# Global resolution setting (will be set from command line)
+INFERENCE_RESOLUTION = 128
+
 
 def load_model(config_path, ckpt_path, device='cuda'):
     """Load the trained model from checkpoint"""
@@ -53,7 +56,7 @@ def load_model(config_path, ckpt_path, device='cuda'):
     return model, config
 
 
-def load_and_preprocess_drr(drr_path, target_size=128, apply_camera_transform=True, camera_type='PA'):
+def load_and_preprocess_drr(drr_path, target_size=None, apply_camera_transform=True, camera_type='PA'):
     """
     Load and preprocess a DRR image to match training data format.
     
@@ -62,7 +65,14 @@ def load_and_preprocess_drr(drr_path, target_size=128, apply_camera_transform=Tr
     2. Apply camera-specific transforms (flip for PA, transpose+flip for Lateral)
     3. Normalize to [0, 1]
     4. Stack to 3 channels
+    
+    Args:
+        target_size: If None, uses global INFERENCE_RESOLUTION (default 128)
     """
+    global INFERENCE_RESOLUTION
+    if target_size is None:
+        target_size = INFERENCE_RESOLUTION if 'INFERENCE_RESOLUTION' in globals() else 128
+        
     # Load image
     img = Image.open(drr_path).convert('L')
     
@@ -209,8 +219,10 @@ def process_patient(model, patient_dir, output_dir, device, compare_gt=False):
     lat_tensor = torch.from_numpy(lat_img).unsqueeze(0).float().to(device)  # (1, H, W, 3)
     
     # Reconstruct 3D volume
-    print(f"  Reconstructing 3D volume (128 slices)...")
-    volume = reconstruct_ct_volume(model, pa_tensor, lat_tensor, device, num_slices=128)
+    global INFERENCE_RESOLUTION
+    num_slices = INFERENCE_RESOLUTION if 'INFERENCE_RESOLUTION' in globals() else 128
+    print(f"  Reconstructing 3D volume ({num_slices} slices)...")
+    volume = reconstruct_ct_volume(model, pa_tensor, lat_tensor, device, num_slices=num_slices)
     
     print(f"  ✓ Volume shape: {volume.shape}")
     print(f"  ✓ Value range: [{volume.min():.3f}, {volume.max():.3f}]")
@@ -303,6 +315,8 @@ def main():
                         help='Directory containing patient folders with DRR images')
     parser.add_argument('--output_dir', type=str, default='./inference_outputs',
                         help='Directory to save reconstructed volumes')
+    parser.add_argument('--resolution', type=int, default=128, choices=[128, 256],
+                        help='Input/output resolution (128 or 256)')
     parser.add_argument('--device', type=str, default='cuda',
                         help='Device (cuda or cpu)')
     parser.add_argument('--compare_gt', action='store_true',
@@ -319,7 +333,12 @@ def main():
     print(f"Checkpoint: {args.ckpt_path}")
     print(f"Data directory: {args.data_dir}")
     print(f"Output directory: {args.output_dir}")
+    print(f"Resolution: {args.resolution}x{args.resolution}")
     print("="*60)
+    
+    # Store resolution globally for use in process_patient
+    global INFERENCE_RESOLUTION
+    INFERENCE_RESOLUTION = args.resolution
     
     # Load model
     model, config = load_model(args.config_path, args.ckpt_path, args.device)

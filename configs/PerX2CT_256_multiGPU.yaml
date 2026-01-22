@@ -94,18 +94,19 @@ model:
 data:
   target: main.DataModuleFromConfig
   params:
-    batch_size: 32  # Per GPU batch size (32 * 3 = 96 total)
+    batch_size: 32  # Per GPU batch size (32 * 3 = 96 total) - REDUCED to prevent OOM
     num_workers: 12  # More workers for multi-GPU
     train:
-      target: x2ct_nerf.data.LIDC.LIDCTrain
+      target: x2ct_nerf.data.custom256.Custom256Train
       params:
-        dataset_class: LIDCMultiInputMultiResTypes
+        dataset_class: Custom256MultiInputDataset
         training_images_list_file: ./dataset_list/custom256/train.txt
         size: ${input_img_size}
         opt:
           num_ctslice_per_item: 1
           xray_size: 256
-          ct_size: 256  # Changed from 320 to match resolution
+          ct_size: 256
+          xray_base_dir: /workspace/drr_patient_data_256  # Custom X-ray directory
           rendering_type: ${data_projection_type}
           input_type:
           - ${model.params.image_key}
@@ -123,15 +124,16 @@ data:
           - 0
           - 255
     validation:
-      target: x2ct_nerf.data.LIDC.LIDCTest
+      target: x2ct_nerf.data.custom256.Custom256Test
       params:
-        dataset_class: ${data.params.train.params.dataset_class}
+        dataset_class: Custom256MultiInputDataset
         test_images_list_file: ./dataset_list/custom256/val.txt
         size: ${data.params.train.params.size}
         opt:
           num_ctslice_per_item: 1
           xray_size: 256
-          ct_size: 256  # Changed from 320 to match resolution
+          ct_size: 256
+          xray_base_dir: /workspace/drr_patient_data_256  # Custom X-ray directory
           rendering_type: ${data_projection_type}
           input_type:
             - ${model.params.image_key}
@@ -155,3 +157,5 @@ lightning:
     precision: 16  # Mixed precision for faster training
     accumulate_grad_batches: 1
     gradient_clip_val: 1.0  # Gradient clipping for stability
+    strategy: ddp  # Add explicit DDP strategy
+    sync_batchnorm: true  # Add for multi-GPU batch norm sync
