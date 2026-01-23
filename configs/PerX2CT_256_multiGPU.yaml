@@ -94,8 +94,8 @@ model:
 data:
   target: main.DataModuleFromConfig
   params:
-    batch_size: 8  # Per GPU batch size - reduced to prevent OOM
-    num_workers: 8  # Reduced workers
+    batch_size: 24  # Per GPU - increased since only using 26/80GB
+    num_workers: 12  # More workers for larger batches
     train:
       target: x2ct_nerf.data.custom256.Custom256Train
       params:
@@ -155,7 +155,7 @@ lightning:
   trainer:
     max_epochs: 20
     precision: 16  # Mixed precision for faster training
-    accumulate_grad_batches: 4  # Effective batch = 8*3*4 = 96
+    accumulate_grad_batches: 2  # Effective batch = 24*3*2 = 144
     gradient_clip_val: 1.0  # Gradient clipping for stability
     strategy: ddp  # Add explicit DDP strategy
     sync_batchnorm: true  # Add for multi-GPU batch norm sync
