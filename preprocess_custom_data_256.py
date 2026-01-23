@@ -135,15 +135,26 @@ def process_patient(args):
     # Process CT volume
     result = process_ct_volume(nifti_path, output_ct_dir, patient_id, force)
     
-    # Process X-rays (resize to 256x256)
+    # Process X-rays (resize to 256x256) - PRIORITIZE _flipped versions
     if output_xray_dir:
         output_patient_xray_dir = Path(output_xray_dir) / patient_id
         output_patient_xray_dir.mkdir(parents=True, exist_ok=True)
         
-        for xray_file in patient_dir.glob("*_drr*.png"):
-            output_xray_path = output_patient_xray_dir / xray_file.name
-            if not output_xray_path.exists() or force:
-                resize_xray(xray_file, output_xray_path)
+        # Find flipped DRRs first (preferred)
+        flipped_drrs = list(patient_dir.glob("*_drr_flipped.png"))
+        
+        if flipped_drrs:
+            # Use flipped DRRs
+            for xray_file in flipped_drrs:
+                output_xray_path = output_patient_xray_dir / xray_file.name
+                if not output_xray_path.exists() or force:
+                    resize_xray(xray_file, output_xray_path)
+        else:
+            # Fallback to non-flipped DRRs if no flipped versions exist
+            for xray_file in patient_dir.glob("*_drr*.png"):
+                output_xray_path = output_patient_xray_dir / xray_file.name
+                if not output_xray_path.exists() or force:
+                    resize_xray(xray_file, output_xray_path)
         
         # Copy original NIfTI for reference
         import shutil
