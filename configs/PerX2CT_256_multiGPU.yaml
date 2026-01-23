@@ -40,8 +40,8 @@ model:
           axis_in_position: before_inr
           ct_res: ${input_ct_res}
           feature_res: 64
-          N_rand_recon: 32768  # Reduced for memory
-          chunk: 262144  # Reduced to prevent OOM
+          N_rand_recon: 65536  # Full resolution
+          chunk: 524288  # Increased for speed
           cond_list:
           - PA
           - Lateral
@@ -78,7 +78,7 @@ model:
                     rendering_type: ${data_projection_type}
                     output_color_ch: 575
                     N_importance: 0
-                    netchunk: 131072  # Reduced to prevent OOM
+                    netchunk: 262144  # Balanced for speed
                     batchify_axis: 1
       decoder_params: ${model.params.ddconfig}
     lossconfig:
