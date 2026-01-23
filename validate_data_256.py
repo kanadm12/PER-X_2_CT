@@ -101,20 +101,22 @@ def validate_sample_loading(config, num_samples=5):
                     errors.append(f"Sample {i}: Missing key '{key}'")
             
             # Verify tensor shapes
+            # NOTE: Data loader outputs HWC format [256, 256, 3]
+            # Model's get_input() permutes to CHW [3, 256, 256] during training
             if 'ctslice' in sample:
                 ct_shape = sample['ctslice'].shape
-                if ct_shape != torch.Size([3, 256, 256]):
-                    errors.append(f"Sample {i}: CT shape {ct_shape}, expected [3, 256, 256]")
+                if ct_shape != torch.Size([256, 256, 3]):
+                    errors.append(f"Sample {i}: CT shape {ct_shape}, expected [256, 256, 3]")
             
             if 'PA' in sample:
                 pa_shape = sample['PA'].shape
-                if pa_shape != torch.Size([3, 256, 256]):
-                    errors.append(f"Sample {i}: PA shape {pa_shape}, expected [3, 256, 256]")
+                if pa_shape != torch.Size([256, 256, 3]):
+                    errors.append(f"Sample {i}: PA shape {pa_shape}, expected [256, 256, 3]")
             
             if 'Lateral' in sample:
                 lat_shape = sample['Lateral'].shape
-                if lat_shape != torch.Size([3, 256, 256]):
-                    errors.append(f"Sample {i}: Lateral shape {lat_shape}, expected [3, 256, 256]")
+                if lat_shape != torch.Size([256, 256, 3]):
+                    errors.append(f"Sample {i}: Lateral shape {lat_shape}, expected [256, 256, 3]")
                     
         except Exception as e:
             errors.append(f"Sample {i}: {str(e)}")
