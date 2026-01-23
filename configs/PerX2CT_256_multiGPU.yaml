@@ -40,8 +40,8 @@ model:
           axis_in_position: before_inr
           ct_res: ${input_ct_res}
           feature_res: 64
-          N_rand_recon: 65536
-          chunk: 1048576  # Increased for A100 80GB
+          N_rand_recon: 32768  # Reduced for memory
+          chunk: 262144  # Reduced to prevent OOM
           cond_list:
           - PA
           - Lateral
@@ -78,7 +78,7 @@ model:
                     rendering_type: ${data_projection_type}
                     output_color_ch: 575
                     N_importance: 0
-                    netchunk: 524288  # Increased for A100 80GB
+                    netchunk: 131072  # Reduced to prevent OOM
                     batchify_axis: 1
       decoder_params: ${model.params.ddconfig}
     lossconfig:
@@ -94,8 +94,8 @@ model:
 data:
   target: main.DataModuleFromConfig
   params:
-    batch_size: 32  # Per GPU batch size (32 * 3 = 96 total) - REDUCED to prevent OOM
-    num_workers: 12  # More workers for multi-GPU
+    batch_size: 8  # Per GPU batch size - reduced to prevent OOM
+    num_workers: 8  # Reduced workers
     train:
       target: x2ct_nerf.data.custom256.Custom256Train
       params:
@@ -155,7 +155,7 @@ lightning:
   trainer:
     max_epochs: 20
     precision: 16  # Mixed precision for faster training
-    accumulate_grad_batches: 1
+    accumulate_grad_batches: 4  # Effective batch = 8*3*4 = 96
     gradient_clip_val: 1.0  # Gradient clipping for stability
     strategy: ddp  # Add explicit DDP strategy
     sync_batchnorm: true  # Add for multi-GPU batch norm sync
